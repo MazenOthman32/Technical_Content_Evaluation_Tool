@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>التقارير</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f3f4f1;
+  --ink: #141513;
+  --muted: #6b6f68;
+  --line: #e4e6e0;
+  --card: #ffffff;
+  --soft: #eceee8;
+  --danger: #8d2b22;
+  --ok: #1d6b45;
+  --major: #b42318;
+  --moderate: #b54708;
+  --minor: #175cd3;
+}
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.6 "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+}
+.page { width: min(680px, calc(100% - 32px)); margin: 0 auto; padding: 40px 0 72px }
+h1 { margin: 0 0 18px; font-size: 1.8rem; letter-spacing: -0.03em }
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 16px;
+}
+.composer, .course-row { display: flex; gap: 8px }
+.course-row { margin-top: 8px }
+input {
+  width: 100%;
+  border: 1px solid #d9ddd4;
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font: inherit;
+  outline: none;
+}
+input:focus { border-color: #111; box-shadow: 0 0 0 4px rgba(20,21,19,.08) }
+#source { direction: ltr; text-align: left }
+.pick, .back {
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 14px;
+  padding: 0 14px;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  color: inherit;
+  text-decoration: none;
+}
+.go {
+  width: 100%;
+  margin-top: 10px;
+  border: 0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--ink);
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.go:disabled { opacity: .55; cursor: progress }
+.error { margin: 12px 0 0; color: var(--danger) }
+.status { margin: 14px 0 0; color: var(--muted) }
+.board { margin-top: 22px; display: grid; gap: 8px }
+.board a, .board button.course {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  text-align: right;
+  text-decoration: none;
+  color: inherit;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  font: inherit;
+  cursor: pointer;
+}
+.board a:hover, .board button.course:hover { border-color: #c8cdc3 }
+.sev, .count { color: var(--muted); font-size: .85rem }
+.major { color: var(--major) } .moderate { color: var(--moderate) } .minor { color: var(--minor) }
+.head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px }
+.head h1 { margin: 0 }
+.empty {
+  padding: 18px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--muted);
+}
+@media (max-width: 640px) {
+  .composer, .course-row { flex-direction: column }
+  .pick { padding: 12px }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="head">
+    <h1 id="title">التقارير</h1>
+    <a class="back" id="back" href="#/" hidden>الكل</a>
+  </div>
+
+  <form id="desk" class="panel" autocomplete="off">
+    <div class="composer">
+      <input id="source" placeholder="لينك الفيديو أو المسار" required>
+      <button class="pick" id="pick-file" type="button">ملف</button>
+      <button class="pick" id="pick-dir" type="button">فولدر</button>
+    </div>
+    <div class="course-row">
+      <input id="course" placeholder="اسم الكورس">
+    </div>
+    <p id="form-error" class="error" hidden></p>
+    <button class="go" id="generate" type="submit">توليد التقرير</button>
+    <p id="status" class="status" hidden></p>
+  </form>
+
+  <section class="board" id="board"></section>
+</div>
+<script>
+const state = { running: false, courses: [] };
+const sourceEl = document.querySelector("#source");
+const courseEl = document.querySelector("#course");
+const errorEl = document.querySelector("#form-error");
+const statusEl = document.querySelector("#status");
+const boardEl = document.querySelector("#board");
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[char]));
+}
+
+function showError(message) {
+  errorEl.hidden = !message;
+  errorEl.textContent = message || "";
+}
+
+function currentCourse() {
+  const hash = location.hash.replace(/^#/, "");
+  if (!hash.startsWith("course/")) return "";
+  return decodeURIComponent(hash.slice("course/".length));
+}
+
+function openCourse(id) {
+  location.hash = "course/" + encodeURIComponent(id);
+}
+
+async function browse(kind) {
+  showError("");
+  try {
+    const res = await fetch("/api/browse", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({kind}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "الاختيار متعملش");
+    if (data.path) sourceEl.value = data.path;
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+function counts(item) {
+  return `<span class="sev"><b class="major">${item.major || 0}</b> · <b class="moderate">${item.moderate || 0}</b> · <b class="minor">${item.minor || 0}</b></span>`;
+}
+
+function render() {
+  const id = currentCourse();
+  const course = state.courses.find(item => item.id === id);
+  const title = document.querySelector("#title");
+  const back = document.querySelector("#back");
+  back.hidden = !course;
+  title.textContent = course ? course.title : "التقارير";
+  courseEl.value = course ? course.title : "";
+  if (!course) {
+    boardEl.innerHTML = state.courses.length
+      ? state.courses.map(item => `
+          <button class="course" type="button" data-id="${escapeHtml(item.id)}">
+            <span>${escapeHtml(item.title)}</span>
+            <span class="count">${item.count}</span>
+          </button>`).join("")
+      : `<p class="empty">لسه مفيش تقارير</p>`;
+    boardEl.querySelectorAll("[data-id]").forEach(button => {
+      button.addEventListener("click", () => openCourse(button.dataset.id));
+    });
+    return;
+  }
+  boardEl.innerHTML = course.reports.length
+    ? course.reports.map(item => `
+        <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">
+          <span>${escapeHtml(item.title)}</span>
+          ${counts(item)}
+        </a>`).join("")
+    : `<p class="empty">الكورس ده لسه من غير تقارير</p>`;
+}
+
+async function loadCourses() {
+  const res = await fetch("/api/status");
+  const data = await res.json();
+  state.courses = data.courses || [];
+  render();
+}
+
+async function poll(id) {
+  let since = 0;
+  while (state.running) {
+    const res = await fetch(`/api/jobs/${id}?since=${since}`);
+    const data = await res.json();
+    if (data.logs?.length) {
+      statusEl.hidden = false;
+      statusEl.textContent = data.logs[data.logs.length - 1];
+      since = data.next;
+    }
+    if (data.status === "running") {
+      await new Promise(resolve => setTimeout(resolve, 900));
+      continue;
+    }
+    state.running = false;
+    document.querySelector("#generate").disabled = false;
+    if (data.status === "done") {
+      statusEl.textContent = "التقرير جاهز";
+      await loadCourses();
+      if (data.result?.course_id) openCourse(data.result.course_id);
+    } else {
+      statusEl.hidden = true;
+      showError(data.error || "حصلت مشكلة أثناء التشغيل.");
+    }
+  }
+}
+
+document.querySelector("#pick-file").addEventListener("click", () => browse("file"));
+document.querySelector("#pick-dir").addEventListener("click", () => browse("dir"));
+document.querySelector("#back").addEventListener("click", event => {
+  event.preventDefault();
+  courseEl.value = "";
+  location.hash = "/";
+});
+window.addEventListener("hashchange", render);
+document.querySelector("#desk").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (state.running) return;
+  const value = sourceEl.value.trim();
+  if (!value) return;
+  showError("");
+  statusEl.hidden = false;
+  statusEl.textContent = "بيشتغل";
+  document.querySelector("#generate").disabled = true;
+  const opened = currentCourse();
+  const courseName = courseEl.value.trim() || (state.courses.find(item => item.id === opened)?.title || "");
+  try {
+    const res = await fetch("/api/jobs", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        sources: [{kind: /^https?:\/\//i.test(value) ? "link" : "path", value}],
+        topic: courseName,
+        batch_name: courseName,
+        min_confidence: 0.75,
+        verify: true,
+        retranscribe: false,
+        save_keys: false,
+        keys: {},
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "مقدرناش نبدأ");
+    state.running = true;
+    await poll(data.id);
+  } catch (err) {
+    state.running = false;
+    document.querySelector("#generate").disabled = false;
+    statusEl.hidden = true;
+    showError(err.message);
+  }
+});
+
+loadCourses();
+</script>
+</body>
+</html>

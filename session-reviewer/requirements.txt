@@ -1,0 +1,8 @@
+anthropic>=0.40
+openai>=1.40
+gdown>=5.1
+python-dotenv>=1.0
+pypdf>=4.0
+flask>=3.0
+# اختياري للتفريغ المحلي المجاني (--backend local):
+# faster-whisper>=1.0
