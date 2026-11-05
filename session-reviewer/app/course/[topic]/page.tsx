@@ -27,7 +27,7 @@ export default async function CoursePage({ params }: { params: Promise<{ topic: 
     <main className="page">
       <div className="head">
         <h1>{name}</h1>
-        <Link className="back" href="/">الكل</Link>
+        <Link className="back" href="/">الكورسات</Link>
       </div>
       {error ? (
         <p className="notice">{error.message}</p>
@@ -40,18 +40,17 @@ export default async function CoursePage({ params }: { params: Promise<{ topic: 
               href={`/report/${session.slug.split("/").map(encodeURIComponent).join("/")}`}
             >
               <strong>{session.title}</strong>
-              <span className="sev">
-                <b className="major">{session.major}</b>
-                {" · "}
-                <b className="moderate">{session.moderate}</b>
-                {" · "}
-                <b className="minor">{session.minor}</b>
+              <span className="chips">
+                {session.major > 0 ? <span className="chip major">{session.major} جوهري</span> : null}
+                {session.moderate > 0 ? <span className="chip moderate">{session.moderate} متوسط</span> : null}
+                {session.minor > 0 ? <span className="chip minor">{session.minor} بسيط</span> : null}
+                {session.major + session.moderate + session.minor === 0 ? <span className="sev">بدون ملاحظات</span> : null}
               </span>
             </Link>
           ))}
         </div>
       ) : (
-        <p className="notice">الكورس ده لسه من غير تقارير</p>
+        <p className="empty">الكورس ده لسه من غير تقارير</p>
       )}
     </main>
   );

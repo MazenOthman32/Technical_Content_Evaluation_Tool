@@ -6,134 +6,175 @@
 <title>التقارير</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #f3f4f1;
-  --ink: #141513;
-  --muted: #6b6f68;
-  --line: #e4e6e0;
-  --card: #ffffff;
-  --soft: #eceee8;
+  --bg: #f4f1ea;
+  --ink: #1c1915;
+  --muted: #6f6a62;
+  --line: #e3ddd2;
+  --card: #fffcf7;
+  --soft: #efeae1;
   --danger: #8d2b22;
-  --ok: #1d6b45;
-  --major: #b42318;
-  --moderate: #b54708;
-  --minor: #175cd3;
+  --major: #9b2c2c;
+  --moderate: #9a5b12;
+  --minor: #1d4e89;
 }
 * { box-sizing: border-box }
 [hidden] { display: none !important }
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--bg);
+  background:
+    radial-gradient(900px 280px at 100% -40px, #efe6d4 0, transparent 60%),
+    var(--bg);
   color: var(--ink);
-  font: 16px/1.6 "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  font: 16px/1.55 "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
 }
-.page { width: min(680px, calc(100% - 32px)); margin: 0 auto; padding: 40px 0 72px }
-h1 { margin: 0 0 18px; font-size: 1.8rem; letter-spacing: -0.03em }
+.page { width: min(720px, calc(100% - 32px)); margin: 0 auto; padding: 36px 0 80px }
+.top { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 18px }
+h1 { margin: 0; font-size: 1.75rem; font-weight: 600; letter-spacing: -0.03em }
+.back {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: inherit;
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+}
+.back:hover { border-color: #cfc6b8 }
 .panel {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 18px;
   padding: 16px;
+  box-shadow: 0 16px 40px rgba(40, 32, 18, .04);
 }
-.composer, .course-row { display: flex; gap: 8px }
-.course-row { margin-top: 8px }
+.field { display: block; margin: 0 0 12px }
+.field-label { display: block; margin-bottom: 6px; font-size: .82rem; color: var(--muted) }
+.composer { display: flex; gap: 8px; margin-top: 6px }
 input {
   width: 100%;
-  border: 1px solid #d9ddd4;
+  border: 1px solid #ddd6c8;
   background: #fff;
-  border-radius: 14px;
-  padding: 14px 16px;
+  border-radius: 12px;
+  padding: 13px 14px;
   font: inherit;
+  color: var(--ink);
   outline: none;
 }
-input:focus { border-color: #111; box-shadow: 0 0 0 4px rgba(20,21,19,.08) }
+input:focus { border-color: #1c1915; box-shadow: 0 0 0 4px rgba(28, 25, 21, .08) }
 #source { direction: ltr; text-align: left }
-.pick, .back {
+.pick {
   border: 1px solid var(--line);
-  background: white;
-  border-radius: 14px;
+  background: var(--soft);
+  border-radius: 12px;
   padding: 0 14px;
+  min-height: 48px;
   font: inherit;
   cursor: pointer;
-  white-space: nowrap;
-  color: inherit;
-  text-decoration: none;
+  color: var(--ink);
 }
+.pick:hover { background: #e7e0d4 }
 .go {
   width: 100%;
-  margin-top: 10px;
   border: 0;
-  border-radius: 14px;
-  padding: 14px 16px;
+  border-radius: 12px;
+  padding: 13px 16px;
   background: var(--ink);
-  color: white;
+  color: #f7f3ea;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
 }
+.go:hover { background: #2a251f }
 .go:disabled { opacity: .55; cursor: progress }
-.error { margin: 12px 0 0; color: var(--danger) }
-.status { margin: 14px 0 0; color: var(--muted) }
-.board { margin-top: 22px; display: grid; gap: 8px }
-.board a, .board button.course {
+.error { margin: 10px 0 0; color: var(--danger); font-size: .92rem }
+.status {
+  margin: 10px 0 0;
+  color: var(--muted);
+  background: var(--soft);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.section { margin-top: 28px }
+.section h2 { margin: 0 0 10px; font-size: .95rem; font-weight: 600 }
+.board { display: grid; gap: 8px }
+.row {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
   width: 100%;
   text-align: right;
   text-decoration: none;
   color: inherit;
-  background: white;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 14px 16px;
   font: inherit;
   cursor: pointer;
 }
-.board a:hover, .board button.course:hover { border-color: #c8cdc3 }
-.sev, .count { color: var(--muted); font-size: .85rem }
-.major { color: var(--major) } .moderate { color: var(--moderate) } .minor { color: var(--minor) }
-.head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px }
-.head h1 { margin: 0 }
+.row:hover { border-color: #cfc6b8; background: #fff }
+.row-title { font-weight: 500 }
+.meta { color: var(--muted); font-size: .85rem; white-space: nowrap }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end }
+.chip {
+  font-size: .75rem;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--soft);
+}
+.chip.major { color: var(--major) }
+.chip.moderate { color: var(--moderate) }
+.chip.minor { color: var(--minor) }
 .empty {
-  padding: 18px;
-  background: white;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  padding: 22px 16px;
+  text-align: center;
   color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
 }
 @media (max-width: 640px) {
-  .composer, .course-row { flex-direction: column }
-  .pick { padding: 12px }
+  .composer { flex-direction: column }
+  .pick { width: 100% }
+  .row { align-items: flex-start; flex-direction: column; gap: 8px }
+  .chips { justify-content: flex-start }
 }
 </style>
 </head>
 <body>
 <div class="page">
-  <div class="head">
+  <div class="top">
     <h1 id="title">التقارير</h1>
-    <a class="back" id="back" href="#/" hidden>الكل</a>
+    <a class="back" id="back" href="#/" hidden>الكورسات</a>
   </div>
 
   <form id="desk" class="panel" autocomplete="off">
-    <div class="composer">
-      <input id="source" placeholder="لينك الفيديو أو المسار" required>
-      <button class="pick" id="pick-file" type="button">ملف</button>
-      <button class="pick" id="pick-dir" type="button">فولدر</button>
+    <div class="field">
+      <span class="field-label">الفيديو</span>
+      <div class="composer">
+        <input id="source" aria-label="الفيديو" placeholder="لينك أو مسار" required>
+        <button class="pick" id="pick-file" type="button">ملف</button>
+        <button class="pick" id="pick-dir" type="button">فولدر</button>
+      </div>
     </div>
-    <div class="course-row">
+    <label class="field">
+      <span class="field-label">الكورس</span>
       <input id="course" placeholder="اسم الكورس">
-    </div>
-    <p id="form-error" class="error" hidden></p>
+    </label>
     <button class="go" id="generate" type="submit">توليد التقرير</button>
-    <p id="status" class="status" hidden></p>
+    <p id="form-error" class="error" role="alert" hidden></p>
+    <p id="status" class="status" aria-live="polite" hidden></p>
   </form>
 
-  <section class="board" id="board"></section>
+  <section class="section">
+    <h2 id="board-label">الكورسات</h2>
+    <div class="board" id="board"></div>
+  </section>
 </div>
 <script>
 const state = { running: false, courses: [] };
@@ -142,11 +183,19 @@ const courseEl = document.querySelector("#course");
 const errorEl = document.querySelector("#form-error");
 const statusEl = document.querySelector("#status");
 const boardEl = document.querySelector("#board");
+const generateEl = document.querySelector("#generate");
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[char]));
+}
+
+function reportCount(count) {
+  if (count === 1) return "تقرير واحد";
+  if (count === 2) return "تقريران";
+  if (count >= 3 && count <= 10) return count + " تقارير";
+  return count + " تقرير";
 }
 
 function showError(message) {
@@ -180,24 +229,28 @@ async function browse(kind) {
   }
 }
 
-function counts(item) {
-  return `<span class="sev"><b class="major">${item.major || 0}</b> · <b class="moderate">${item.moderate || 0}</b> · <b class="minor">${item.minor || 0}</b></span>`;
+function chips(item) {
+  const parts = [];
+  if (item.major) parts.push(`<span class="chip major">${item.major} جوهري</span>`);
+  if (item.moderate) parts.push(`<span class="chip moderate">${item.moderate} متوسط</span>`);
+  if (item.minor) parts.push(`<span class="chip minor">${item.minor} بسيط</span>`);
+  if (!parts.length) return `<span class="meta">بدون ملاحظات</span>`;
+  return `<span class="chips">${parts.join("")}</span>`;
 }
 
 function render() {
   const id = currentCourse();
   const course = state.courses.find(item => item.id === id);
-  const title = document.querySelector("#title");
-  const back = document.querySelector("#back");
-  back.hidden = !course;
-  title.textContent = course ? course.title : "التقارير";
+  document.querySelector("#title").textContent = course ? course.title : "التقارير";
+  document.querySelector("#back").hidden = !course;
+  document.querySelector("#board-label").hidden = Boolean(course);
   courseEl.value = course ? course.title : "";
   if (!course) {
     boardEl.innerHTML = state.courses.length
       ? state.courses.map(item => `
-          <button class="course" type="button" data-id="${escapeHtml(item.id)}">
-            <span>${escapeHtml(item.title)}</span>
-            <span class="count">${item.count}</span>
+          <button class="row" type="button" data-id="${escapeHtml(item.id)}">
+            <span class="row-title">${escapeHtml(item.title)}</span>
+            <span class="meta">${reportCount(item.count)}</span>
           </button>`).join("")
       : `<p class="empty">لسه مفيش تقارير</p>`;
     boardEl.querySelectorAll("[data-id]").forEach(button => {
@@ -207,9 +260,9 @@ function render() {
   }
   boardEl.innerHTML = course.reports.length
     ? course.reports.map(item => `
-        <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">
-          <span>${escapeHtml(item.title)}</span>
-          ${counts(item)}
+        <a class="row" href="${escapeHtml(item.url)}" target="_blank" rel="noopener">
+          <span class="row-title">${escapeHtml(item.title)}</span>
+          ${chips(item)}
         </a>`).join("")
     : `<p class="empty">الكورس ده لسه من غير تقارير</p>`;
 }
@@ -236,7 +289,8 @@ async function poll(id) {
       continue;
     }
     state.running = false;
-    document.querySelector("#generate").disabled = false;
+    generateEl.disabled = false;
+    generateEl.textContent = "توليد التقرير";
     if (data.status === "done") {
       statusEl.textContent = "التقرير جاهز";
       await loadCourses();
@@ -264,7 +318,8 @@ document.querySelector("#desk").addEventListener("submit", async event => {
   showError("");
   statusEl.hidden = false;
   statusEl.textContent = "بيشتغل";
-  document.querySelector("#generate").disabled = true;
+  generateEl.disabled = true;
+  generateEl.textContent = "جاري التوليد";
   const opened = currentCourse();
   const courseName = courseEl.value.trim() || (state.courses.find(item => item.id === opened)?.title || "");
   try {
@@ -288,7 +343,8 @@ document.querySelector("#desk").addEventListener("submit", async event => {
     await poll(data.id);
   } catch (err) {
     state.running = false;
-    document.querySelector("#generate").disabled = false;
+    generateEl.disabled = false;
+    generateEl.textContent = "توليد التقرير";
     statusEl.hidden = true;
     showError(err.message);
   }

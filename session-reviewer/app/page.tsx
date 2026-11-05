@@ -35,13 +35,20 @@ export default async function Page() {
           {[...courses.entries()].map(([name, count]) => (
             <Link key={name} className="item" href={`/course/${encodeURIComponent(name)}`}>
               <strong>{name}</strong>
-              <span className="sev">{count}</span>
+              <span className="sev">{reportCount(count)}</span>
             </Link>
           ))}
         </div>
       ) : (
-        <p className="notice">لسه مفيش تقارير</p>
+        <p className="empty">لسه مفيش تقارير</p>
       )}
     </main>
   );
+}
+
+function reportCount(count: number) {
+  if (count === 1) return "تقرير واحد";
+  if (count === 2) return "تقريران";
+  if (count >= 3 && count <= 10) return `${count} تقارير`;
+  return `${count} تقرير`;
 }
