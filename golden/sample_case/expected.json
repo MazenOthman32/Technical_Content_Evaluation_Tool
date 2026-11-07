@@ -1,0 +1,11 @@
+{
+  "findings": [
+    {
+      "t_start": "00:01:00",
+      "t_end": "00:01:20",
+      "category": "factual",
+      "severity": "critical",
+      "summary": "Example seeded critical issue for harness smoke tests"
+    }
+  ]
+}

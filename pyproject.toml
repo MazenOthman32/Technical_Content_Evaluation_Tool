@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "instant-plus-video-reviewer"
+version = "0.1.0"
+description = "Instant Plus Video Reviewer — AI-assisted technical content QA"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "anthropic>=0.40",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "python-multipart>=0.0.9",
+  "pydantic>=2.7",
+  "pyyaml>=6.0",
+  "python-dotenv>=1.0",
+  "rapidfuzz>=3.9",
+  "pytesseract>=0.3.10",
+  "Pillow>=10.0",
+  "faster-whisper>=1.0",
+  "pytest>=8.0",
+]
+
+[project.scripts]
+video-reviewer = "video_reviewer.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["video_reviewer*"]
+
+[tool.setuptools.package-data]
+video_reviewer = ["prompts/v1/*", "static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

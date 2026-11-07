@@ -1,0 +1,11 @@
+{
+  "findings": [
+    {
+      "t_start": "00:01:08",
+      "t_end": "00:01:25",
+      "category": "factual",
+      "severity": "critical",
+      "summary": "Matched within tolerance"
+    }
+  ]
+}

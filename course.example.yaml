@@ -1,0 +1,12 @@
+title: FastAPI Intermediate Lesson
+field: backend
+level: intermediate
+language: auto
+stack:
+  - python==3.12
+  - fastapi==0.115
+glossary:
+  - FastAPI
+  - AsyncIO
+  - PostgreSQL
+  - Pydantic
