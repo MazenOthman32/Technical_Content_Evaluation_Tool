@@ -2,9 +2,31 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 from pathlib import Path
 
 from .schema import FrameInfo, OcrResult
+
+
+def _configure_tesseract() -> None:
+    import pytesseract
+
+    existing = shutil.which("tesseract")
+    candidates = [
+        existing,
+        os.getenv("TESSERACT_CMD"),
+        str(Path.home() / "AppData/Local/InstantPlusTools/bin/tesseract.exe"),
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    ]
+    for cand in candidates:
+        if cand and Path(cand).exists():
+            pytesseract.pytesseract.tesseract_cmd = cand
+            tessdata = Path(cand).resolve().parent.parent / "tessdata"
+            if tessdata.exists() and not os.getenv("TESSDATA_PREFIX"):
+                os.environ["TESSDATA_PREFIX"] = str(tessdata)
+            break
 
 
 def ocr_frames(
@@ -16,6 +38,7 @@ def ocr_frames(
     import pytesseract
     from PIL import Image
 
+    _configure_tesseract()
     results: list[OcrResult] = []
     for fr in frames:
         img_path = work_dir / fr.path
