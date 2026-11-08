@@ -61,6 +61,11 @@ alter table public.user_settings add column if not exists groq_verified_at times
 alter table public.user_settings add column if not exists openai_verified_at timestamptz null;
 alter table public.reviews add column if not exists quality_score numeric null;
 alter table public.reviews add column if not exists duration_ms int null;
+alter table public.reviews add column if not exists category text not null default 'general';
+alter table public.reviews add column if not exists tags text[] not null default '{}';
+
+create index if not exists reviews_category_idx on public.reviews (category);
+create index if not exists reviews_tags_idx on public.reviews using gin (tags);
 
 do $$
 begin
@@ -179,6 +184,11 @@ create policy "update own reviews"
     (select auth.uid()) = user_id
     or public.is_staff()
   );
+
+drop policy if exists "delete reviews staff" on public.reviews;
+create policy "delete reviews staff"
+  on public.reviews for delete to authenticated
+  using (public.is_staff());
 
 create or replace function public.handle_new_user()
 returns trigger

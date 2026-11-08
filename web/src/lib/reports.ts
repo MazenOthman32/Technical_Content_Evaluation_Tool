@@ -61,6 +61,8 @@ export type ReviewRow = {
   cost: number | null;
   created_at: string;
   report: ReportPayload | null;
+  category?: string | null;
+  tags?: string[] | null;
 };
 
 export function verdictLabel(v?: string | null) {

@@ -1,9 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import ConfirmModal from "@/components/ConfirmModal";
 import Skeleton from "@/components/Skeleton";
+import { useToast } from "@/components/Toast";
+import { isStaff } from "@/lib/auth/roles";
+import { BUSINESS_CATEGORIES, categoryLabel, normalizeTags } from "@/lib/categories";
+import { readOrgMeta } from "@/lib/orgMeta";
+import { exportReviewPdf } from "@/lib/pdfReport";
 import {
   Finding,
   ReportPayload,
@@ -18,14 +24,22 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function ReportDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const toast = useToast();
   const id = decodeURIComponent(params.id || "");
   const [row, setRow] = useState<ReviewRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [role, setRole] = useState("reviewer");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sev, setSev] = useState("");
   const [cat, setCat] = useState("");
   const [retrying, setRetrying] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [tagDraft, setTagDraft] = useState("");
+  const [savingMeta, setSavingMeta] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -34,18 +48,39 @@ export default function ReportDetailPage() {
 
     async function load(first = false) {
       const supabase = createClient();
-      const { data, error } = await supabase
+      const { data: auth } = await supabase.auth.getUser();
+      if (auth.user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", auth.user.id)
+          .maybeSingle();
+        if (!cancelled) setRole(profile?.role || "reviewer");
+      }
+      let { data, error } = await supabase
         .from("reviews")
         .select(
-          "id,video_name,drive_url,provider,model,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,report"
+          "id,video_name,drive_url,provider,model,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,report,category,tags"
         )
         .eq("id", id)
         .maybeSingle();
+      if (error && String(error.message || "").includes("category")) {
+        const fallback = await supabase
+          .from("reviews")
+          .select(
+            "id,video_name,drive_url,provider,model,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,report"
+          )
+          .eq("id", id)
+          .maybeSingle();
+        data = fallback.data as typeof data;
+        error = fallback.error;
+      }
       if (cancelled) return;
       if (error) setErr(error.message);
       else if (!data) setErr("التقرير غير موجود");
       else {
-        setRow(data as ReviewRow);
+        const enriched = { ...(data as ReviewRow), ...readOrgMeta(data as ReviewRow) };
+        setRow(enriched);
         setErr("");
         const st = data.status;
         if (st === "queued" || st === "running" || st === "downloading") {
@@ -84,11 +119,73 @@ export default function ReportDetailPage() {
       const res = await fetch(`/api/process/reviews/${encodeURIComponent(row.id)}/retry`, { method: "POST" });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "فشل إعادة المعالجة");
-      setRow((prev) => (prev ? { ...prev, status: "queued", report: null, proposed_verdict: null, findings_count: 0 } : prev));
+      setRow((prev) =>
+        prev ? { ...prev, status: "queued", report: null, proposed_verdict: null, findings_count: 0 } : prev
+      );
+      toast.push("تمت إعادة إرسال المراجعة للمعالج", "ok");
     } catch (ex: unknown) {
-      setErr(ex instanceof Error ? ex.message : "فشل إعادة المعالجة");
+      toast.push(ex instanceof Error ? ex.message : "فشل إعادة المعالجة", "error");
     } finally {
       setRetrying(false);
+    }
+  }
+
+  async function saveMeta(next: { category?: string; tags?: string[] }) {
+    if (!row) return;
+    setSavingMeta(true);
+    const previous = row;
+    setRow({ ...row, ...next });
+    try {
+      const res = await fetch(`/api/reviews/${encodeURIComponent(row.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "فشل الحفظ");
+      setRow((prev) =>
+        prev
+          ? {
+              ...prev,
+              category: json.category || next.category || prev.category,
+              tags: json.tags || next.tags || prev.tags,
+            }
+          : prev
+      );
+      toast.push("تم تحديث التصنيف", "ok");
+    } catch (ex: unknown) {
+      setRow(previous);
+      toast.push(ex instanceof Error ? ex.message : "فشل الحفظ", "error");
+    } finally {
+      setSavingMeta(false);
+    }
+  }
+
+  async function exportPdf() {
+    if (!row) return;
+    setPdfBusy(true);
+    try {
+      await exportReviewPdf(row);
+      toast.push("تم تنزيل PDF", "ok");
+    } catch (ex: unknown) {
+      toast.push(ex instanceof Error ? ex.message : "فشل تصدير PDF", "error");
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!row) return;
+    setDeleteBusy(true);
+    try {
+      const res = await fetch(`/api/reviews/${encodeURIComponent(row.id)}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "فشل الحذف");
+      toast.push("تم حذف التقرير", "ok");
+      router.replace("/app/reports");
+    } catch (ex: unknown) {
+      toast.push(ex instanceof Error ? ex.message : "فشل الحذف", "error");
+      setDeleteBusy(false);
     }
   }
 
@@ -142,7 +239,7 @@ export default function ReportDetailPage() {
     );
   }
 
-  if (err || !row) {
+  if ((err && !row) || !row) {
     return (
       <div className="page-fill">
         <div className="page-head">
@@ -164,7 +261,8 @@ export default function ReportDetailPage() {
         <div>
           <h1 className="page-title">{row.video_name || row.id}</h1>
           <p className="page-sub">
-            {new Date(row.created_at).toLocaleString("ar")} · {row.provider || "—"} / {row.model || report?.model || "—"}
+            {new Date(row.created_at).toLocaleString("ar")} · {categoryLabel(row.category)} ·{" "}
+            {row.provider || "—"} / {row.model || report?.model || "—"}
           </p>
         </div>
         <div className="row-actions">
@@ -172,11 +270,19 @@ export default function ReportDetailPage() {
             كل التقارير
           </Link>
           <button className="btn secondary btn-sm" type="button" onClick={downloadMarkdown}>
-            تنزيل Markdown
+            Markdown
           </button>
           <button className="btn secondary btn-sm" type="button" onClick={downloadJson}>
-            تنزيل JSON
+            JSON
           </button>
+          <button className="btn btn-sm" type="button" disabled={pdfBusy} onClick={exportPdf}>
+            {pdfBusy ? "جاري PDF..." : "تصدير PDF"}
+          </button>
+          {isStaff(role) ? (
+            <button className="btn secondary btn-sm btn-danger" type="button" onClick={() => setDeleteOpen(true)}>
+              حذف
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -205,6 +311,69 @@ export default function ReportDetailPage() {
         </div>
       </div>
 
+      <div className="panel meta-editor settings-panel">
+        <div className="form-grid">
+          <label>
+            تصنيف الأعمال
+            <select
+              value={row.category || "general"}
+              disabled={savingMeta}
+              onChange={(e) => saveMeta({ category: e.target.value })}
+            >
+              {BUSINESS_CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            إضافة وسم
+            <div className="inline-add">
+              <input
+                value={tagDraft}
+                onChange={(e) => setTagDraft(e.target.value)}
+                placeholder="مثل: API, React, Security"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const next = normalizeTags([...(row.tags || []), tagDraft]);
+                    setTagDraft("");
+                    saveMeta({ tags: next });
+                  }
+                }}
+              />
+              <button
+                className="btn secondary btn-sm"
+                type="button"
+                disabled={savingMeta || !tagDraft.trim()}
+                onClick={() => {
+                  const next = normalizeTags([...(row.tags || []), tagDraft]);
+                  setTagDraft("");
+                  saveMeta({ tags: next });
+                }}
+              >
+                إضافة
+              </button>
+            </div>
+          </label>
+        </div>
+        <div className="tag-row" style={{ marginTop: "0.75rem" }}>
+          {(row.tags || []).map((t) => (
+            <button
+              key={t}
+              type="button"
+              className="pill clickable"
+              disabled={savingMeta}
+              onClick={() => saveMeta({ tags: (row.tags || []).filter((x) => x !== t) })}
+              title="إزالة الوسم"
+            >
+              {t} ×
+            </button>
+          ))}
+        </div>
+      </div>
+
       {row.status === "failed" ? (
         <div className="panel banner warn settings-panel" style={{ marginBottom: "1rem" }}>
           <strong>فشلت المعالجة — التقرير مش مكتمل.</strong>
@@ -218,9 +387,6 @@ export default function ReportDetailPage() {
                 {retrying ? "جاري إعادة المعالجة..." : "إعادة المعالجة"}
               </button>
             ) : null}
-            <Link className="btn secondary" href="/app/review">
-              مراجعة جديدة
-            </Link>
           </div>
         </div>
       ) : null}
@@ -229,26 +395,8 @@ export default function ReportDetailPage() {
         <div className="panel banner warn settings-panel">
           <strong>التقرير لسه مش جاهز للمراجعة.</strong>
           <p className="help" style={{ margin: "0.4rem 0 0" }}>
-            الطلب بحالة «{statusLabel(row.status)}» وبيتحلل دلوقتي أو مستني المعالج. الصفحة هتتحدث تلقائياً.
+            الطلب بحالة «{statusLabel(row.status)}» وبيتحلل دلوقتي أو مستني المعالج. الصفحة هتحدث تلقائياً.
           </p>
-          {row.drive_url ? (
-            <p className="help" style={{ marginTop: "0.55rem" }}>
-              المصدر:{" "}
-              <a href={row.drive_url} target="_blank" rel="noreferrer">
-                رابط Drive
-              </a>
-            </p>
-          ) : null}
-          <div className="row-actions" style={{ marginTop: "0.85rem" }}>
-            {row.drive_url ? (
-              <button className="btn" type="button" disabled={retrying} onClick={retryProcessing}>
-                {retrying ? "جاري الإرسال..." : "إعادة إرسال للمعالج"}
-              </button>
-            ) : null}
-            <Link className="btn secondary" href="/app/review">
-              مراجعة جديدة
-            </Link>
-          </div>
         </div>
       ) : ready ? (
         <div className="report-layout">
@@ -350,22 +498,20 @@ export default function ReportDetailPage() {
                 ) : null}
               </>
             )}
-
-            {report?.limitations?.length ? (
-              <div style={{ marginTop: "1.25rem" }}>
-                <h3 className="section-title" style={{ fontSize: "1rem" }}>
-                  حدود المعالجة
-                </h3>
-                <ul className="limits-list">
-                  {report.limitations.map((l) => (
-                    <li key={l}>{l}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
           </div>
         </div>
       ) : null}
+
+      <ConfirmModal
+        open={deleteOpen}
+        title="حذف التقرير"
+        message="سيتم حذف هذا التقييم نهائياً ولن يمكن استرجاعه."
+        confirmLabel="حذف نهائي"
+        danger
+        busy={deleteBusy}
+        onClose={() => (!deleteBusy ? setDeleteOpen(false) : null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

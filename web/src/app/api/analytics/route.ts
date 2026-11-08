@@ -15,7 +15,7 @@ export async function GET() {
   let query = ctx.supabase
     .from("reviews")
     .select(
-      "id,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,user_id,provider,model,video_name"
+      "id,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,user_id,provider,model,video_name,category,tags,report"
     )
     .order("created_at", { ascending: false })
     .limit(1000);
@@ -24,10 +24,30 @@ export async function GET() {
     query = query.eq("user_id", ctx.user.id);
   }
 
-  const { data, error } = await query;
+  let { data, error } = await query;
+  if (error && String(error.message || "").includes("category")) {
+    let fallback = ctx.supabase
+      .from("reviews")
+      .select(
+        "id,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,user_id,provider,model,video_name,report"
+      )
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    if (!isStaff(ctx.profile.role)) fallback = fallback.eq("user_id", ctx.user.id);
+    const retry = await fallback;
+    data = retry.data as typeof data;
+    error = retry.error;
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const rows = data || [];
+  const rows = (data || []).map((r) => {
+    const org = ((r.report as { _org?: { category?: string; tags?: string[] } } | null) || {})?._org;
+    return {
+      ...r,
+      category: r.category || org?.category || "general",
+      tags: r.tags || org?.tags || [],
+    };
+  });
   const total = rows.length;
   const completed = rows.filter((r) =>
     ["done", "completed", "ready"].includes((r.status || "").toLowerCase())
@@ -66,10 +86,12 @@ export async function GET() {
   const verdicts = new Map<string, number>();
   const statuses = new Map<string, number>();
   const providers = new Map<string, number>();
+  const categories = new Map<string, number>();
   for (const r of rows) {
     verdicts.set(r.proposed_verdict || "pending", (verdicts.get(r.proposed_verdict || "pending") || 0) + 1);
     statuses.set(r.status || "unknown", (statuses.get(r.status || "unknown") || 0) + 1);
     providers.set(r.provider || "unknown", (providers.get(r.provider || "unknown") || 0) + 1);
+    categories.set(r.category || "general", (categories.get(r.category || "general") || 0) + 1);
   }
 
   const avgDuration = durations.length
@@ -89,8 +111,12 @@ export async function GET() {
     findings_count: r.findings_count || 0,
     quality_score: r.quality_score,
     provider: r.provider,
+    category: r.category || "general",
     created_at: r.created_at,
   }));
+
+  const successRate = total ? Math.round((completed.length / total) * 100) : 0;
+  const failRate = total ? Math.round((failed.length / total) * 100) : 0;
 
   const insights: string[] = [];
   if (!total) {
@@ -135,11 +161,14 @@ export async function GET() {
       findings: findingsTotal,
       avg_findings: avgFindings,
       wow_percent: wow,
+      success_rate: successRate,
+      fail_rate: failRate,
     },
     trend,
     verdicts: [...verdicts.entries()].map(([label, value]) => ({ label, value })),
     statuses: [...statuses.entries()].map(([label, value]) => ({ label, value })),
     providers: [...providers.entries()].map(([label, value]) => ({ label, value })),
+    categories: [...categories.entries()].map(([label, value]) => ({ label, value })),
     recent,
     insights,
   });

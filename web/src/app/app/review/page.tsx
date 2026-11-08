@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
+import { BUSINESS_CATEGORIES } from "@/lib/categories";
 import { MODELS } from "@/lib/models";
 import { createClient } from "@/lib/supabase/client";
 
@@ -13,6 +14,8 @@ export default function ReviewPage() {
   const [driveUrl, setDriveUrl] = useState("");
   const [provider, setProvider] = useState("groq");
   const [model, setModel] = useState(MODELS.groq[0].id);
+  const [category, setCategory] = useState("general");
+  const [tags, setTags] = useState("");
   const [fileName, setFileName] = useState("لم يتم اختيار ملف");
   const [fileInputKey, setFileInputKey] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -91,7 +94,8 @@ export default function ReviewPage() {
       const started = Date.now();
       const reviewId = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
       const videoName = source === "file" ? file?.name || "video" : url;
-      const { error: insertErr } = await supabase.from("reviews").insert({
+      const tagList = [...new Set(tags.split(",").map((t) => t.trim()).filter(Boolean))].slice(0, 12);
+      const basePayload = {
         id: reviewId,
         user_id: auth.user.id,
         video_name: videoName,
@@ -100,7 +104,17 @@ export default function ReviewPage() {
         model,
         status: canProcess ? "queued" : "awaiting_backend",
         duration_ms: Date.now() - started,
+        report: { _org: { category, tags: tagList } },
+      };
+      let { error: insertErr } = await supabase.from("reviews").insert({
+        ...basePayload,
+        category,
+        tags: tagList,
       });
+      if (insertErr && String(insertErr.message || "").includes("category")) {
+        const retry = await supabase.from("reviews").insert(basePayload);
+        insertErr = retry.error;
+      }
       if (insertErr) throw new Error(insertErr.message || "تعذر حفظ المراجعة");
 
       if (canProcess) {
@@ -201,6 +215,24 @@ export default function ReviewPage() {
                 </option>
               ))}
             </select>
+          </label>
+          <label>
+            تصنيف الأعمال
+            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+              {BUSINESS_CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            وسوم (مفصولة بفاصلة)
+            <input
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="React, API, Security"
+            />
           </label>
         </div>
 

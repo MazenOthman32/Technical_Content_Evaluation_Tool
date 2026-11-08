@@ -3,6 +3,8 @@
 ## 1) قاعدة البيانات
 
 1. افتح Supabase SQL Editor ونفّذ [`supabase/schema.sql`](supabase/schema.sql)
+2. للترقية الحالية (تصنيفات + حذف التقارير) نفّذ أيضاً:
+   [`supabase/migrations/20261108_reviews_categories_delete.sql`](supabase/migrations/20261108_reviews_categories_delete.sql)
 2. من Project Settings → API انسخ:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`

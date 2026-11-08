@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import MetricCard from "@/components/MetricCard";
 import Skeleton from "@/components/Skeleton";
+import { categoryLabel } from "@/lib/categories";
+import { statusLabel, verdictLabel } from "@/lib/reports";
 
 type Analytics = {
   scope: string;
@@ -18,11 +21,14 @@ type Analytics = {
     findings: number;
     avg_findings: number;
     wow_percent: number;
+    success_rate: number;
+    fail_rate: number;
   };
   trend: { date: string; count: number }[];
   verdicts: { label: string; value: number }[];
   statuses: { label: string; value: number }[];
   providers: { label: string; value: number }[];
+  categories: { label: string; value: number }[];
   recent: {
     id: string;
     video_name: string | null;
@@ -31,6 +37,7 @@ type Analytics = {
     findings_count: number;
     quality_score: number | null;
     provider: string | null;
+    category?: string | null;
     created_at: string;
   }[];
   insights: string[];
@@ -60,17 +67,15 @@ export default function DashboardPage() {
   const verdictMax = Math.max(1, ...(data?.verdicts.map((v) => v.value) || [1]));
   const statusMax = Math.max(1, ...(data?.statuses.map((v) => v.value) || [1]));
   const providerMax = Math.max(1, ...(data?.providers.map((v) => v.value) || [1]));
-  const completionRate = data?.totals.evaluations
-    ? Math.round((data.totals.completed / data.totals.evaluations) * 100)
-    : 0;
+  const categoryMax = Math.max(1, ...(data?.categories?.map((v) => v.value) || [1]));
 
   return (
     <div className="page-fill">
       <div className="page-head">
         <div>
-          <h1 className="page-title">Analysis</h1>
+          <h1 className="page-title">لوحة التحليل</h1>
           <p className="page-sub">
-            تحليلات مبنية على بيانات التقييمات
+            نظرة تنفيذية على جودة التقييمات والأداء
             {data
               ? ` · ${data.scope === "organization" ? "نطاق المؤسسة" : "نطاقك الشخصي"}${
                   data.role ? ` · ${data.role}` : ""
@@ -78,6 +83,9 @@ export default function DashboardPage() {
               : ""}
           </p>
         </div>
+        <Link className="btn" href="/app/review">
+          مراجعة جديدة
+        </Link>
       </div>
 
       {loading ? <Skeleton rows={8} /> : null}
@@ -90,21 +98,20 @@ export default function DashboardPage() {
               label="إجمالي التقييمات"
               value={data.totals.evaluations}
               hint={`${data.totals.completed} مكتملة · WoW ${data.totals.wow_percent}%`}
-              ring={completionRate}
+              ring={data.totals.success_rate}
             />
             <MetricCard
-              label="متوسط زمن الاستجابة"
-              value={
-                data.totals.avg_duration_ms
-                  ? `${(data.totals.avg_duration_ms / 1000).toFixed(1)}ث`
-                  : "—"
-              }
-              hint={`${data.totals.queued} قيد المعالجة`}
+              label="معدل النجاح"
+              value={`${data.totals.success_rate}%`}
+              hint={`فشل ${data.totals.fail_rate}% · قيد الانتظار ${data.totals.queued}`}
+              ring={data.totals.success_rate}
             />
             <MetricCard
               label="متوسط الجودة"
               value={data.totals.avg_quality_score || "—"}
-              hint={`فشل: ${data.totals.failed}`}
+              hint={`زمن متوسط ${
+                data.totals.avg_duration_ms ? `${(data.totals.avg_duration_ms / 1000).toFixed(1)}ث` : "—"
+              }`}
               ring={Math.min(100, Number(data.totals.avg_quality_score) || 0)}
             />
             <MetricCard
@@ -115,7 +122,7 @@ export default function DashboardPage() {
           </section>
 
           <section className="insights glass">
-            <h2>Insights</h2>
+            <h2>ملخص تشغيلي</h2>
             <ul>
               {data.insights.map((item) => (
                 <li key={item}>{item}</li>
@@ -145,17 +152,35 @@ export default function DashboardPage() {
             </article>
 
             <article className="chart-card glass">
+              <h2>التصنيفات التجارية</h2>
+              <div className="verdict-list">
+                {(data.categories || []).length ? (
+                  data.categories.map((v) => (
+                    <div className="verdict-row" key={v.label}>
+                      <span>{categoryLabel(v.label)}</span>
+                      <div className="verdict-track">
+                        <div className="verdict-fill" style={{ width: `${(v.value / categoryMax) * 100}%` }} />
+                      </div>
+                      <strong>{v.value}</strong>
+                    </div>
+                  ))
+                ) : (
+                  <p className="help">ابدأ بتصنيف التقييمات لتظهر هنا.</p>
+                )}
+              </div>
+            </article>
+          </section>
+
+          <section className="grid-2">
+            <article className="chart-card glass">
               <h2>توزيع الأحكام</h2>
               <div className="verdict-list">
                 {data.verdicts.length ? (
                   data.verdicts.map((v) => (
                     <div className="verdict-row" key={v.label}>
-                      <span>{v.label}</span>
+                      <span>{verdictLabel(v.label)}</span>
                       <div className="verdict-track">
-                        <div
-                          className="verdict-fill"
-                          style={{ width: `${(v.value / verdictMax) * 100}%` }}
-                        />
+                        <div className="verdict-fill" style={{ width: `${(v.value / verdictMax) * 100}%` }} />
                       </div>
                       <strong>{v.value}</strong>
                     </div>
@@ -165,19 +190,25 @@ export default function DashboardPage() {
                 )}
               </div>
             </article>
-          </section>
-
-          <section className="grid-2">
             <article className="chart-card glass">
-              <h2>الحالات</h2>
+              <h2>الحالات والمزوّدون</h2>
               <div className="verdict-list">
                 {data.statuses.map((v) => (
-                  <div className="verdict-row" key={v.label}>
+                  <div className="verdict-row" key={`s-${v.label}`}>
+                    <span>{statusLabel(v.label)}</span>
+                    <div className="verdict-track">
+                      <div className="verdict-fill" style={{ width: `${(v.value / statusMax) * 100}%` }} />
+                    </div>
+                    <strong>{v.value}</strong>
+                  </div>
+                ))}
+                {data.providers.map((v) => (
+                  <div className="verdict-row" key={`p-${v.label}`}>
                     <span>{v.label}</span>
                     <div className="verdict-track">
                       <div
                         className="verdict-fill"
-                        style={{ width: `${(v.value / statusMax) * 100}%` }}
+                        style={{ width: `${(v.value / providerMax) * 100}%`, background: "var(--brand-2)" }}
                       />
                     </div>
                     <strong>{v.value}</strong>
@@ -185,55 +216,45 @@ export default function DashboardPage() {
                 ))}
               </div>
             </article>
-            <article className="chart-card glass">
-              <h2>المزودون</h2>
-              <div className="verdict-list">
-                {data.providers.length ? (
-                  data.providers.map((v) => (
-                    <div className="verdict-row" key={v.label}>
-                      <span>{v.label}</span>
-                      <div className="verdict-track">
-                        <div
-                          className="verdict-fill"
-                          style={{ width: `${(v.value / providerMax) * 100}%` }}
-                        />
-                      </div>
-                      <strong>{v.value}</strong>
-                    </div>
-                  ))
-                ) : (
-                  <p className="help">لا يوجد استخدام مزودين بعد.</p>
-                )}
-              </div>
-            </article>
           </section>
 
           <section className="panel recent-panel">
-            <h2 style={{ margin: "0 0 0.8rem", fontSize: "1rem" }}>أحدث التقييمات</h2>
+            <div className="label-row" style={{ marginBottom: "0.8rem" }}>
+              <h2 className="section-title">أحدث التقييمات</h2>
+              <Link className="btn secondary btn-sm" href="/app/reports">
+                كل التقارير
+              </Link>
+            </div>
             {data.recent.length ? (
               <div className="table-scroll">
                 <table className="table">
                   <thead>
                     <tr>
                       <th>الفيديو</th>
+                      <th>التصنيف</th>
                       <th>الحالة</th>
                       <th>الحكم</th>
-                      <th>المزود</th>
-                      <th>ملاحظات</th>
+                      <th>الجودة</th>
                       <th>التاريخ</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.recent.map((r) => (
                       <tr key={r.id}>
                         <td>{r.video_name || r.id}</td>
+                        <td>{categoryLabel(r.category)}</td>
                         <td>
-                          <span className="pill">{r.status}</span>
+                          <span className="pill">{statusLabel(r.status)}</span>
                         </td>
-                        <td>{r.proposed_verdict || "—"}</td>
-                        <td>{r.provider || "—"}</td>
-                        <td>{r.findings_count}</td>
+                        <td>{verdictLabel(r.proposed_verdict)}</td>
+                        <td>{r.quality_score ?? "—"}</td>
                         <td>{new Date(r.created_at).toLocaleString("ar")}</td>
+                        <td>
+                          <Link className="btn secondary btn-sm" href={`/app/reports/${encodeURIComponent(r.id)}`}>
+                            فتح
+                          </Link>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
