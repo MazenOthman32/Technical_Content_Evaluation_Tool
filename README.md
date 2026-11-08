@@ -48,14 +48,23 @@ video-reviewer ui
 
 ثم افتح: http://127.0.0.1:8765
 
-حسابات الدخول الافتراضية:
+### واجهة Enterprise (Next.js)
 
-| المستخدم | كلمة المرور | الدور |
+```powershell
+cd web
+copy .env.local.example .env.local
+npm install
+npm run dev
+```
+
+بعد تنفيذ `supabase/schema.sql` و`node scripts/seed-super-admin.mjs`:
+
+| الحساب | الدخول | الدور |
 |---|---|---|
-| `admin` | `admin123` | يرى كل المراجعات |
-| `reviewer` | `reviewer123` | يرى مراجعاته فقط |
+| Super Admin | `MazenOthman320@gmail.com` + `SUPER_ADMIN_PASSWORD` | إدارة كاملة + مفاتيح افتراضية |
+| Admin / Reviewer | يُنشأ من الإعدادات → إدارة المستخدمين | حسب الدور |
 
-كل حساب يضبط مفاتيح API الخاصة به من صفحة **الإعدادات**.
+محليًا (FastAPI UI) ما زال متاحًا عبر `video-reviewer ui` مع `admin/admin123` و`reviewer/reviewer123`.
 
 ### CLI — تقييم Golden Dataset
 

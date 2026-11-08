@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Skeleton from "@/components/Skeleton";
 import { createClient } from "@/lib/supabase/client";
 
 type Review = {
@@ -14,6 +15,7 @@ type Review = {
 
 export default function ReportsPage() {
   const [rows, setRows] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -23,6 +25,7 @@ export default function ReportsPage() {
         .select("id,video_name,status,proposed_verdict,created_at,report")
         .order("created_at", { ascending: false });
       setRows((data as Review[]) || []);
+      setLoading(false);
     })();
   }, []);
 
@@ -39,8 +42,10 @@ export default function ReportsPage() {
   return (
     <div>
       <h1 className="page-title">التقارير</h1>
-      <div className="panel" style={{ display: "grid", gap: "0.75rem" }}>
-        {!rows.length ? <p className="help">لا توجد تقارير بعد.</p> : null}
+      <p className="page-sub">تنزيل مخرجات التقييم بصيغة JSON</p>
+      <div className="panel" style={{ display: "grid", gap: "0.75rem", marginTop: "1rem" }}>
+        {loading ? <Skeleton rows={4} /> : null}
+        {!loading && !rows.length ? <p className="help">لا توجد تقارير بعد.</p> : null}
         {rows.map((r) => (
           <div
             key={r.id}
@@ -51,8 +56,9 @@ export default function ReportsPage() {
               flexWrap: "wrap",
               alignItems: "center",
               border: "1px solid var(--line)",
-              borderRadius: 12,
-              padding: "0.85rem",
+              borderRadius: 14,
+              padding: "0.9rem",
+              background: "color-mix(in srgb, var(--panel-solid) 70%, transparent)",
             }}
           >
             <div>

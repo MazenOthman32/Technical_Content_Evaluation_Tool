@@ -1,30 +1,18 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useToast } from "@/components/Toast";
+import { MODELS } from "@/lib/models";
 import { createClient } from "@/lib/supabase/client";
 
-const MODELS: Record<string, { id: string; label: string }[]> = {
-  groq: [
-    { id: "openai/gpt-oss-120b", label: "GPT-OSS 120B (Groq)" },
-    { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" },
-    { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant" },
-  ],
-  anthropic: [
-    { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" },
-    { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
-  ],
-};
-
 export default function ReviewPage() {
+  const toast = useToast();
   const [source, setSource] = useState<"drive" | "file">("drive");
   const [provider, setProvider] = useState("groq");
   const [model, setModel] = useState(MODELS.groq[0].id);
   const [fileName, setFileName] = useState("لم يتم اختيار ملف");
-  const [msg, setMsg] = useState("");
-  const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const processApi = process.env.NEXT_PUBLIC_PROCESS_API_URL || "";
-
   const modelOptions = useMemo(() => MODELS[provider] || [], [provider]);
 
   useEffect(() => {
@@ -48,8 +36,6 @@ export default function ReviewPage() {
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setErr("");
-    setMsg("");
     setLoading(true);
     const fd = new FormData(e.currentTarget);
     const driveUrl = String(fd.get("drive_url") || "").trim();
@@ -62,19 +48,22 @@ export default function ReviewPage() {
 
       const { data: settings } = await supabase
         .from("user_settings")
-        .select("anthropic_api_key,groq_api_key")
+        .select("anthropic_api_key,groq_api_key,openai_api_key")
         .eq("user_id", auth.user.id)
         .maybeSingle();
 
       const key =
         provider === "groq"
           ? settings?.groq_api_key
-          : settings?.anthropic_api_key;
-      if (!key) throw new Error("أضف مفتاح API الخاص بحسابك من الإعدادات أولاً");
+          : provider === "openai"
+            ? settings?.openai_api_key
+            : settings?.anthropic_api_key;
+      if (!key) throw new Error("أضف مفتاح API من الإعدادات أولاً");
 
       if (source === "drive" && !driveUrl) throw new Error("الصق لينك Google Drive");
       if (source === "file" && !file?.name) throw new Error("اختر ملف فيديو");
 
+      const started = Date.now();
       const reviewId = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
       await supabase.from("reviews").insert({
         id: reviewId,
@@ -84,6 +73,7 @@ export default function ReviewPage() {
         provider,
         model,
         status: processApi ? "queued" : "awaiting_backend",
+        duration_ms: Date.now() - started,
       });
 
       if (processApi) {
@@ -102,16 +92,14 @@ export default function ReviewPage() {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.detail || "فشل إرسال المهمة للمعالج");
         }
-        setMsg("تم إرسال المراجعة للمعالجة.");
+        toast.push("تم إرسال المراجعة للمعالجة", "ok");
       } else {
-        setMsg(
-          "تم حفظ طلب المراجعة في Supabase. اضبط NEXT_PUBLIC_PROCESS_API_URL لربط معالج الفيديو."
-        );
+        toast.push("تم حفظ الطلب. اربط NEXT_PUBLIC_PROCESS_API_URL للمعالجة الكاملة", "info");
       }
       e.currentTarget.reset();
       setFileName("لم يتم اختيار ملف");
     } catch (ex: unknown) {
-      setErr(ex instanceof Error ? ex.message : "حدث خطأ");
+      toast.push(ex instanceof Error ? ex.message : "حدث خطأ", "error");
     } finally {
       setLoading(false);
     }
@@ -120,13 +108,14 @@ export default function ReviewPage() {
   return (
     <div>
       <h1 className="page-title">مراجعة جديدة</h1>
-      <form className="panel form" onSubmit={onSubmit}>
+      <p className="page-sub">ارفع فيديو أو الصق رابط Drive وابدأ تقييم الجودة</p>
+      <form className="panel form" onSubmit={onSubmit} style={{ maxWidth: 720, marginTop: "1rem" }}>
         <div className="tabs">
           <button type="button" className={source === "drive" ? "active" : ""} onClick={() => setSource("drive")}>
             Google Drive
           </button>
           <button type="button" className={source === "file" ? "active" : ""} onClick={() => setSource("file")}>
-            ملف
+            ملف محلي
           </button>
         </div>
 
@@ -156,6 +145,7 @@ export default function ReviewPage() {
             <select name="provider" value={provider} onChange={(e) => setProvider(e.target.value)}>
               <option value="groq">Groq</option>
               <option value="anthropic">Anthropic</option>
+              <option value="openai">OpenAI</option>
             </select>
           </label>
           <label>
@@ -171,10 +161,8 @@ export default function ReviewPage() {
         </div>
 
         <button className="btn" type="submit" disabled={loading}>
-          {loading ? "جاري الإرسال..." : "بدء المراجعة"}
+          {loading ? <><span className="spinner" /> جاري الإرسال...</> : "بدء المراجعة"}
         </button>
-        {err ? <div className="banner error">{err}</div> : null}
-        {msg ? <div className="banner ok">{msg}</div> : null}
       </form>
     </div>
   );

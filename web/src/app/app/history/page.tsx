@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Skeleton from "@/components/Skeleton";
 import { createClient } from "@/lib/supabase/client";
 
 type Review = {
@@ -11,30 +12,36 @@ type Review = {
   findings_count: number | null;
   created_at: string;
   cost: number | null;
+  duration_ms: number | null;
+  quality_score: number | null;
 };
 
 export default function HistoryPage() {
   const [rows, setRows] = useState<Review[]>([]);
   const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("reviews")
-        .select("id,video_name,status,proposed_verdict,findings_count,created_at,cost")
+        .select("id,video_name,status,proposed_verdict,findings_count,created_at,cost,duration_ms,quality_score")
         .order("created_at", { ascending: false });
       if (error) setErr(error.message);
       else setRows((data as Review[]) || []);
+      setLoading(false);
     })();
   }, []);
 
   return (
     <div>
       <h1 className="page-title">السجل</h1>
-      <div className="panel">
+      <p className="page-sub">كل التقييمات المرتبطة بصلاحياتك</p>
+      <div className="panel" style={{ marginTop: "1rem" }}>
+        {loading ? <Skeleton rows={5} /> : null}
         {err ? <div className="banner error">{err}</div> : null}
-        {!rows.length && !err ? <p className="help">لا توجد مراجعات بعد.</p> : null}
+        {!loading && !rows.length && !err ? <p className="help">لا توجد مراجعات بعد.</p> : null}
         {rows.length ? (
           <table className="table">
             <thead>
@@ -43,7 +50,8 @@ export default function HistoryPage() {
                 <th>التاريخ</th>
                 <th>الحالة</th>
                 <th>الحكم</th>
-                <th>الملاحظات</th>
+                <th>الجودة</th>
+                <th>الزمن</th>
               </tr>
             </thead>
             <tbody>
@@ -55,7 +63,8 @@ export default function HistoryPage() {
                     <span className="pill">{r.status}</span>
                   </td>
                   <td>{r.proposed_verdict || "—"}</td>
-                  <td>{r.findings_count ?? 0}</td>
+                  <td>{r.quality_score ?? "—"}</td>
+                  <td>{r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}ث` : "—"}</td>
                 </tr>
               ))}
             </tbody>

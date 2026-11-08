@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Logo from "@/components/Logo";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -22,7 +22,7 @@ export default function LoginPage() {
       const supabase = createClient();
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) throw err;
-      router.replace("/app/review");
+      router.replace("/app/dashboard");
       router.refresh();
     } catch (ex: unknown) {
       setError(ex instanceof Error ? ex.message : "تعذر تسجيل الدخول");
@@ -35,19 +35,19 @@ export default function LoginPage() {
     <div className="login-page">
       <div className="login-wrap">
         <section className="login-hero">
-          <Image src="/brand/instant-plus-logo.png" alt="Instant+" width={220} height={48} priority />
-          <h1>Video Reviewer</h1>
-          <p>منصة مراجعة المحتوى التقني لفريق Instant Plus</p>
+          <Logo />
+          <h1>Technical Content Evaluation</h1>
+          <p>منصة مؤسسية لمراجعة جودة المحتوى التقني بذكاء اصطناعي — لفريق Instant Plus.</p>
         </section>
         <section className="login-card">
           <form className="form" onSubmit={onSubmit}>
             <div>
               <h2 style={{ margin: 0 }}>تسجيل الدخول</h2>
-              <p className="help">الدخول عبر Supabase للحسابات المصرّح بها فقط</p>
+              <p className="help">الحسابات تُدار بواسطة الأدمن فقط</p>
             </div>
             <label>
               البريد الإلكتروني
-              <input name="email" type="email" required placeholder="admin@instantplus.com" />
+              <input name="email" type="email" required placeholder="name@company.com" autoComplete="username" />
             </label>
             <label>
               كلمة المرور
@@ -57,12 +57,13 @@ export default function LoginPage() {
                   type={showPass ? "text" : "password"}
                   required
                   placeholder="••••••••"
-                  style={{ width: "100%", paddingLeft: "4rem" }}
+                  autoComplete="current-password"
+                  style={{ width: "100%", paddingLeft: "4.2rem" }}
                 />
                 <button
                   type="button"
                   className="btn secondary"
-                  style={{ position: "absolute", left: 6, top: 6, padding: "0.45rem 0.6rem" }}
+                  style={{ position: "absolute", left: 6, top: 6, padding: "0.45rem 0.65rem" }}
                   onClick={() => setShowPass((v) => !v)}
                 >
                   {showPass ? "إخفاء" : "عرض"}
@@ -70,7 +71,7 @@ export default function LoginPage() {
               </div>
             </label>
             <button className="btn" type="submit" disabled={loading}>
-              {loading ? "جاري الدخول..." : "دخول"}
+              {loading ? <><span className="spinner" /> جاري الدخول...</> : "دخول آمن"}
             </button>
             {error ? <div className="banner error">{error}</div> : null}
           </form>
