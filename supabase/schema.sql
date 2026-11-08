@@ -65,9 +65,23 @@ alter table public.reviews add column if not exists category text not null defau
 alter table public.reviews add column if not exists tags text[] not null default '{}';
 alter table public.reviews add column if not exists session_title text;
 
+create table if not exists public.courses (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  slug text not null unique,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.reviews add column if not exists course_id uuid references public.courses(id) on delete set null;
+
 create index if not exists reviews_category_idx on public.reviews (category);
 create index if not exists reviews_tags_idx on public.reviews using gin (tags);
 create index if not exists reviews_session_title_idx on public.reviews (session_title);
+create index if not exists reviews_course_id_idx on public.reviews (course_id);
+create index if not exists courses_slug_idx on public.courses (slug);
+create index if not exists courses_name_idx on public.courses (name);
 
 do $$
 begin
@@ -82,6 +96,7 @@ end $$;
 alter table public.profiles enable row level security;
 alter table public.user_settings enable row level security;
 alter table public.reviews enable row level security;
+alter table public.courses enable row level security;
 
 create or replace function public.current_role()
 returns text
@@ -192,6 +207,27 @@ create policy "delete reviews staff"
   on public.reviews for delete to authenticated
   using (public.is_staff());
 
+drop policy if exists "read courses authenticated" on public.courses;
+create policy "read courses authenticated"
+  on public.courses for select to authenticated
+  using (true);
+
+drop policy if exists "insert courses authenticated" on public.courses;
+create policy "insert courses authenticated"
+  on public.courses for insert to authenticated
+  with check (auth.uid() is not null);
+
+drop policy if exists "update courses staff" on public.courses;
+create policy "update courses staff"
+  on public.courses for update to authenticated
+  using (public.is_staff())
+  with check (public.is_staff());
+
+drop policy if exists "delete courses staff" on public.courses;
+create policy "delete courses staff"
+  on public.courses for delete to authenticated
+  using (public.is_staff());
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -242,7 +278,21 @@ grant usage on schema public to anon, authenticated, service_role;
 grant select, insert, update, delete on public.profiles to authenticated, service_role;
 grant select, insert, update, delete on public.user_settings to authenticated, service_role;
 grant select, insert, update, delete on public.reviews to authenticated, service_role;
+grant select, insert, update, delete on public.courses to authenticated, service_role;
 grant select on public.profiles to anon;
+
+insert into public.courses (name, slug)
+values
+  ('تطوير الواجهات', 'frontend'),
+  ('الباك اند وواجهات API', 'backend'),
+  ('تطوير الموبايل', 'mobile'),
+  ('البيانات والذكاء الاصطناعي', 'data'),
+  ('DevOps والسحابة', 'devops'),
+  ('الأمن السيبراني', 'security'),
+  ('تصميم تجربة المستخدم', 'uiux'),
+  ('المهارات الشخصية', 'soft_skills'),
+  ('كورس عام', 'general')
+on conflict (slug) do update set name = excluded.name, updated_at = now();
 
 -- Ensure Mazen Super Admin profile role (run after user exists in Auth)
 update public.profiles

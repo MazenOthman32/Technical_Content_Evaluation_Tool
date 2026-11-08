@@ -62,6 +62,7 @@ cd "C:\path\to\Final Evaluation Tool"
 1. محتوى `supabase/schema.sql`
 2. محتوى `supabase/migrations/20261108_reviews_categories_delete.sql`
 3. محتوى `supabase/migrations/20261108_session_title.sql`
+4. محتوى `supabase/migrations/20261108_courses_fk.sql` (جدول courses + course_id)
 
 ### إنشاء حسابات البداية
 
@@ -147,7 +148,8 @@ npm run build
 - تسجيل دخول عبر Supabase Auth
 - أدوار: `super_admin` / `admin` / `reviewer`
 - مراجعة فيديو من Drive أو ملف محلي
-- عنوان سيشن لكل تقرير + تصنيف حسب **الكورس** (قائمة جاهزة أو كورس مخصص)
+- عنوان سيشن لكل تقرير (`session_title`)
+- كورسات حقيقية في جدول `courses` مع `course_id` + إنشاء كورس جديد من الواجهة
 - تنزيل **كل تقارير كورس واحد** كـ ZIP PDF، أو تقرير واحد، أو المحدد
 - فتح تقرير كامل مع فلترة الملاحظات
 - حذف التقارير لـ `admin` و `super_admin`

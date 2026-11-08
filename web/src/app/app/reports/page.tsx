@@ -6,16 +6,22 @@ import ConfirmModal from "@/components/ConfirmModal";
 import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
-import { COURSE_CATALOG, courseLabel } from "@/lib/categories";
 import { isStaff } from "@/lib/auth/roles";
+import { Course, courseDisplayName } from "@/lib/courses";
 import { readOrgMeta } from "@/lib/orgMeta";
 import { exportReviewsZip } from "@/lib/pdfReport";
 import { ReviewRow, displaySessionTitle, hasReportContent, statusLabel, verdictLabel } from "@/lib/reports";
 import { createClient } from "@/lib/supabase/client";
 
+function normalizeCourseRelation(row: ReviewRow): ReviewRow {
+  const course = Array.isArray(row.course) ? row.course[0] || null : row.course;
+  return { ...row, course: course || null };
+}
+
 export default function ReportsPage() {
   const toast = useToast();
   const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState("reviewer");
   const [query, setQuery] = useState("");
@@ -39,44 +45,42 @@ export default function ReportsPage() {
           .maybeSingle();
         setRole(profile?.role || "reviewer");
       }
+
+      const coursesRes = await fetch("/api/courses").then((r) => r.json()).catch(() => ({ courses: [] }));
+      setCourses((coursesRes.courses || []) as Course[]);
+
       let { data, error } = await supabase
         .from("reviews")
         .select(
-          "id,video_name,session_title,status,proposed_verdict,findings_count,quality_score,created_at,report,provider,model,category,tags"
+          "id,video_name,session_title,status,proposed_verdict,findings_count,quality_score,created_at,report,provider,model,category,tags,course_id,course:courses(id,name,slug)"
         )
         .order("created_at", { ascending: false });
       if (
         error &&
         (String(error.message || "").includes("category") ||
-          String(error.message || "").includes("session_title"))
+          String(error.message || "").includes("session_title") ||
+          String(error.message || "").includes("course") ||
+          String(error.message || "").includes("courses"))
       ) {
         const fallback = await supabase
           .from("reviews")
           .select(
-            "id,video_name,status,proposed_verdict,findings_count,quality_score,created_at,report,provider,model"
+            "id,video_name,session_title,status,proposed_verdict,findings_count,quality_score,created_at,report,provider,model,category,tags"
           )
           .order("created_at", { ascending: false });
         data = fallback.data as typeof data;
       }
-      setRows(((data as ReviewRow[]) || []).map((r) => ({ ...r, ...readOrgMeta(r) })));
+      setRows(
+        ((data as ReviewRow[]) || []).map((r) => normalizeCourseRelation({ ...r, ...readOrgMeta(r) }))
+      );
       setLoading(false);
     })();
   }, []);
 
-  const courseOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const c of COURSE_CATALOG) map.set(c.id, c.labelAr);
-    for (const r of rows) {
-      const key = r.category || "general";
-      if (!map.has(key)) map.set(key, courseLabel(key));
-    }
-    return [...map.entries()];
-  }, [rows]);
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
-      if (course !== "all" && (r.category || "general") !== course) return false;
+      if (course !== "all" && (r.course_id || r.category || "general") !== course) return false;
       if (status !== "all" && r.status !== status) return false;
       if (!q) return true;
       const hay = [
@@ -86,7 +90,7 @@ export default function ReportsPage() {
         r.proposed_verdict,
         r.provider,
         r.model,
-        courseLabel(r.category),
+        courseDisplayName(r.course, r.category),
         ...(r.tags || []),
       ]
         .filter(Boolean)
@@ -97,13 +101,14 @@ export default function ReportsPage() {
   }, [rows, query, course, status]);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, ReviewRow[]>();
+    const map = new Map<string, { key: string; label: string; items: ReviewRow[] }>();
     for (const r of filtered) {
-      const key = r.category || "general";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(r);
+      const key = r.course_id || r.category || "uncategorized";
+      const label = courseDisplayName(r.course, r.category || "بدون كورس");
+      if (!map.has(key)) map.set(key, { key, label, items: [] });
+      map.get(key)!.items.push(r);
     }
-    return [...map.entries()];
+    return [...map.values()];
   }, [filtered]);
 
   const selectedRows = filtered.filter((r) => selected[r.id]);
@@ -144,17 +149,17 @@ export default function ReportsPage() {
     }
   }
 
-  async function downloadCourse(courseKey: string, items: ReviewRow[]) {
+  async function downloadCourse(groupKey: string, label: string, items: ReviewRow[]) {
     const targets = items.filter((r) => hasReportContent(r.report));
     if (!targets.length) {
       toast.push("لا توجد تقارير جاهزة في هذا الكورس", "error");
       return;
     }
-    setCourseZipBusy(courseKey);
+    setCourseZipBusy(groupKey);
     try {
-      const safe = courseLabel(courseKey).replace(/[^\w\u0600-\u06FF.-]+/g, "_").slice(0, 60);
+      const safe = label.replace(/[^\w\u0600-\u06FF.-]+/g, "_").slice(0, 60);
       await exportReviewsZip(targets, `${safe}-reports.zip`);
-      toast.push(`تم تنزيل ${targets.length} تقرير لكورس ${courseLabel(courseKey)}`, "ok");
+      toast.push(`تم تنزيل ${targets.length} تقرير لكورس ${label}`, "ok");
     } catch (ex: unknown) {
       toast.push(ex instanceof Error ? ex.message : "فشل تنزيل الكورس", "error");
     } finally {
@@ -167,7 +172,7 @@ export default function ReportsPage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">التقارير</h1>
-          <p className="page-sub">تجميع السيشنات حسب الكورس، مع تنزيل PDF للكورس بالكامل</p>
+          <p className="page-sub">سيشنات مجمّعة حسب الكورس مع تنزيل ZIP لكل كورس</p>
         </div>
         <button className="btn" type="button" disabled={zipBusy} onClick={downloadBulk}>
           {zipBusy
@@ -191,9 +196,9 @@ export default function ReportsPage() {
           الكورس
           <select value={course} onChange={(e) => setCourse(e.target.value)}>
             <option value="all">كل الكورسات</option>
-            {courseOptions.map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </select>
@@ -217,27 +222,27 @@ export default function ReportsPage() {
           <EmptyState title="لا توجد تقارير مطابقة" hint="جرّب تغيير الفلتر أو ابدأ مراجعة جديدة." />
         ) : null}
 
-        {grouped.map(([cat, items]) => {
-          const readyCount = items.filter((r) => hasReportContent(r.report)).length;
+        {grouped.map((group) => {
+          const readyCount = group.items.filter((r) => hasReportContent(r.report)).length;
           return (
-            <section key={cat} className="report-group">
+            <section key={group.key} className="report-group">
               <div className="label-row" style={{ marginBottom: "0.65rem" }}>
                 <div>
-                  <h2 className="section-title">{courseLabel(cat)}</h2>
+                  <h2 className="section-title">{group.label}</h2>
                   <span className="help">
-                    {items.length} سيشن · {readyCount} جاهز للتنزيل
+                    {group.items.length} سيشن · {readyCount} جاهز للتنزيل
                   </span>
                 </div>
                 <button
                   className="btn secondary btn-sm"
                   type="button"
-                  disabled={courseZipBusy === cat || !readyCount}
-                  onClick={() => downloadCourse(cat, items)}
+                  disabled={courseZipBusy === group.key || !readyCount}
+                  onClick={() => downloadCourse(group.key, group.label, group.items)}
                 >
-                  {courseZipBusy === cat ? "جاري تنزيل الكورس..." : "تنزيل كورس PDF"}
+                  {courseZipBusy === group.key ? "جاري تنزيل الكورس..." : "تنزيل كورس PDF"}
                 </button>
               </div>
-              {items.map((r) => {
+              {group.items.map((r) => {
                 const ready = hasReportContent(r.report);
                 return (
                   <div key={r.id} className="report-row">
@@ -257,7 +262,7 @@ export default function ReportsPage() {
                         {r.quality_score != null ? ` · جودة ${r.quality_score}` : ""}
                       </div>
                       <div className="tag-row">
-                        <span className="pill">{courseLabel(r.category)}</span>
+                        <span className="pill">{courseDisplayName(r.course, r.category)}</span>
                         {(r.tags || []).slice(0, 4).map((t) => (
                           <span key={t} className="pill">
                             {t}

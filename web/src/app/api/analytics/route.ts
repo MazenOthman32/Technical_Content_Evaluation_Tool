@@ -15,7 +15,7 @@ export async function GET() {
   let query = ctx.supabase
     .from("reviews")
     .select(
-      "id,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,user_id,provider,model,video_name,category,tags,report"
+      "id,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,user_id,provider,model,video_name,session_title,category,tags,course_id,course:courses(id,name,slug),report"
     )
     .order("created_at", { ascending: false })
     .limit(1000);
@@ -25,7 +25,12 @@ export async function GET() {
   }
 
   let { data, error } = await query;
-  if (error && String(error.message || "").includes("category")) {
+  if (
+    error &&
+    (String(error.message || "").includes("category") ||
+      String(error.message || "").includes("course") ||
+      String(error.message || "").includes("session_title"))
+  ) {
     let fallback = ctx.supabase
       .from("reviews")
       .select(
@@ -42,10 +47,14 @@ export async function GET() {
 
   const rows = (data || []).map((r) => {
     const org = ((r.report as { _org?: { category?: string; tags?: string[] } } | null) || {})?._org;
+    const courseRel = Array.isArray((r as { course?: unknown }).course)
+      ? ((r as { course?: { name?: string; slug?: string }[] }).course || [])[0]
+      : (r as { course?: { name?: string; slug?: string } | null }).course;
     return {
       ...r,
-      category: r.category || org?.category || "general",
+      category: courseRel?.name || r.category || org?.category || "general",
       tags: r.tags || org?.tags || [],
+      session_title: (r as { session_title?: string | null }).session_title || null,
     };
   });
   const total = rows.length;
@@ -105,7 +114,7 @@ export async function GET() {
 
   const recent = rows.slice(0, 8).map((r) => ({
     id: r.id,
-    video_name: r.video_name,
+    video_name: (r as { session_title?: string | null }).session_title || r.video_name,
     status: r.status,
     proposed_verdict: r.proposed_verdict,
     findings_count: r.findings_count || 0,

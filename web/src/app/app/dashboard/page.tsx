@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import MetricCard from "@/components/MetricCard";
 import Skeleton from "@/components/Skeleton";
-import { courseLabel } from "@/lib/categories";
 import { statusLabel, verdictLabel } from "@/lib/reports";
 
 type Analytics = {
@@ -157,7 +156,7 @@ export default function DashboardPage() {
                 {(data.categories || []).length ? (
                   data.categories.map((v) => (
                     <div className="verdict-row" key={v.label}>
-                      <span>{courseLabel(v.label)}</span>
+                      <span>{v.label}</span>
                       <div className="verdict-track">
                         <div className="verdict-fill" style={{ width: `${(v.value / categoryMax) * 100}%` }} />
                       </div>
@@ -243,7 +242,7 @@ export default function DashboardPage() {
                     {data.recent.map((r) => (
                       <tr key={r.id}>
                         <td>{r.video_name || r.id}</td>
-                        <td>{courseLabel(r.category)}</td>
+                        <td>{r.category || "—"}</td>
                         <td>
                           <span className="pill">{statusLabel(r.status)}</span>
                         </td>

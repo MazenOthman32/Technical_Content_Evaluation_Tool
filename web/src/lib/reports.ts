@@ -47,6 +47,12 @@ export type ReportPayload = {
   markdown?: string;
 };
 
+export type ReviewCourse = {
+  id: string;
+  name: string;
+  slug?: string;
+};
+
 export type ReviewRow = {
   id: string;
   video_name: string | null;
@@ -64,6 +70,8 @@ export type ReviewRow = {
   report: ReportPayload | null;
   category?: string | null;
   tags?: string[] | null;
+  course_id?: string | null;
+  course?: ReviewCourse | ReviewCourse[] | null;
 };
 
 export function displaySessionTitle(row: Pick<ReviewRow, "session_title" | "video_name" | "id">) {

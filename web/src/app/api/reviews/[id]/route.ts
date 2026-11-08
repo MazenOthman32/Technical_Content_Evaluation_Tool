@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isStaff } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
-import { normalizeCourseKey, normalizeSessionTitle, normalizeTags } from "@/lib/categories";
+import { normalizeSessionTitle, normalizeTags } from "@/lib/categories";
 import { withOrgMeta } from "@/lib/orgMeta";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -20,11 +20,16 @@ export async function PATCH(request: Request, ctx: Ctx) {
   const admin = createAdminClient();
   const { data: review, error } = await admin
     .from("reviews")
-    .select("id,user_id,report,category,tags,session_title")
+    .select("id,user_id,report,category,tags,session_title,course_id")
     .eq("id", id)
     .maybeSingle();
 
-  if (error && !String(error.message || "").includes("category") && !String(error.message || "").includes("session_title")) {
+  if (
+    error &&
+    !String(error.message || "").includes("category") &&
+    !String(error.message || "").includes("session_title") &&
+    !String(error.message || "").includes("course_id")
+  ) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -40,6 +45,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
     category?: string | null;
     tags?: string[] | null;
     session_title?: string | null;
+    course_id?: string | null;
   } | null;
 
   if (!current) return NextResponse.json({ error: "التقرير غير موجود" }, { status: 404 });
@@ -47,11 +53,29 @@ export async function PATCH(request: Request, ctx: Ctx) {
   const canManage = current.user_id === auth.user.id || isStaff(auth.profile.role);
   if (!canManage) return NextResponse.json({ error: "غير مسموح" }, { status: 403 });
 
-  const nextCategory =
-    body.category != null ? normalizeCourseKey(String(body.category)) : current.category || "general";
-  if (!nextCategory) {
-    return NextResponse.json({ error: "اسم الكورس مطلوب" }, { status: 400 });
+  let nextCourseId = current.course_id || null;
+  let nextCategory = current.category || "general";
+
+  if (body.course_id != null) {
+    const courseId = String(body.course_id || "").trim();
+    if (!courseId) {
+      nextCourseId = null;
+      nextCategory = "general";
+    } else {
+      const { data: course, error: courseErr } = await admin
+        .from("courses")
+        .select("id,name,slug")
+        .eq("id", courseId)
+        .maybeSingle();
+      if (courseErr) return NextResponse.json({ error: courseErr.message }, { status: 500 });
+      if (!course) return NextResponse.json({ error: "الكورس غير موجود" }, { status: 400 });
+      nextCourseId = course.id;
+      nextCategory = course.slug;
+    }
+  } else if (body.category != null) {
+    nextCategory = String(body.category || "general").trim().slice(0, 80) || "general";
   }
+
   const nextTags = body.tags != null ? normalizeTags(body.tags) : current.tags || [];
   const nextTitle =
     body.session_title != null
@@ -62,6 +86,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
     category: nextCategory,
     tags: nextTags,
     session_title: nextTitle,
+    course_id: nextCourseId || undefined,
   });
 
   const patch: Record<string, unknown> = {
@@ -70,19 +95,27 @@ export async function PATCH(request: Request, ctx: Ctx) {
     category: nextCategory,
     tags: nextTags,
     session_title: nextTitle || null,
+    course_id: nextCourseId,
   };
 
   let { error: updateErr } = await admin.from("reviews").update(patch).eq("id", id);
   if (
     updateErr &&
     (String(updateErr.message || "").includes("category") ||
-      String(updateErr.message || "").includes("session_title"))
+      String(updateErr.message || "").includes("session_title") ||
+      String(updateErr.message || "").includes("course_id"))
   ) {
-    const soft = { report: patchedReport, updated_at: patch.updated_at };
+    const soft: Record<string, unknown> = { report: patchedReport, updated_at: patch.updated_at };
+    if (!String(updateErr.message || "").includes("session_title")) soft.session_title = nextTitle || null;
+    if (!String(updateErr.message || "").includes("category")) soft.category = nextCategory;
     const retry = await admin.from("reviews").update(soft).eq("id", id);
     updateErr = retry.error;
   }
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+
+  const { data: course } = nextCourseId
+    ? await admin.from("courses").select("id,name,slug").eq("id", nextCourseId).maybeSingle()
+    : { data: null };
 
   return NextResponse.json({
     ok: true,
@@ -90,6 +123,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
     category: patchedReport._org.category,
     tags: patchedReport._org.tags,
     session_title: patchedReport._org.session_title,
+    course_id: nextCourseId,
+    course,
   });
 }
 

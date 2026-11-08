@@ -7,16 +7,21 @@ import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { isStaff } from "@/lib/auth/roles";
-import { courseLabel } from "@/lib/categories";
+import { courseDisplayName } from "@/lib/courses";
 import { readOrgMeta } from "@/lib/orgMeta";
 import { ReviewRow, displaySessionTitle, statusLabel, verdictLabel } from "@/lib/reports";
 import { createClient } from "@/lib/supabase/client";
 
+function normalizeCourseRelation(row: ReviewRow): ReviewRow {
+  const course = Array.isArray(row.course) ? row.course[0] || null : row.course;
+  return { ...row, course: course || null };
+}
+
 export default function HistoryPage() {
   const toast = useToast();
   const [rows, setRows] = useState<ReviewRow[]>([]);
-  const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
   const [role, setRole] = useState("reviewer");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,16 +40,22 @@ export default function HistoryPage() {
       }
       let { data, error } = await supabase
         .from("reviews")
-        .select("id,video_name,session_title,status,proposed_verdict,findings_count,created_at,cost,duration_ms,quality_score,category,report")
+        .select(
+          "id,video_name,session_title,status,proposed_verdict,findings_count,created_at,cost,duration_ms,quality_score,category,course_id,course:courses(id,name,slug),report"
+        )
         .order("created_at", { ascending: false });
       if (
         error &&
         (String(error.message || "").includes("category") ||
-          String(error.message || "").includes("session_title"))
+          String(error.message || "").includes("session_title") ||
+          String(error.message || "").includes("course") ||
+          String(error.message || "").includes("courses"))
       ) {
         const fallback = await supabase
           .from("reviews")
-          .select("id,video_name,status,proposed_verdict,findings_count,created_at,cost,duration_ms,quality_score,report")
+          .select(
+            "id,video_name,session_title,status,proposed_verdict,findings_count,created_at,cost,duration_ms,quality_score,report"
+          )
           .order("created_at", { ascending: false });
         data = fallback.data as typeof data;
         error = fallback.error;
@@ -52,10 +63,7 @@ export default function HistoryPage() {
       if (error) setErr(error.message);
       else {
         setRows(
-          ((data as ReviewRow[]) || []).map((r) => ({
-            ...r,
-            ...readOrgMeta(r),
-          }))
+          ((data as ReviewRow[]) || []).map((r) => normalizeCourseRelation({ ...r, ...readOrgMeta(r) }))
         );
       }
       setLoading(false);
@@ -114,7 +122,7 @@ export default function HistoryPage() {
                 {rows.map((r) => (
                   <tr key={r.id}>
                     <td>{displaySessionTitle(r)}</td>
-                    <td>{courseLabel(r.category)}</td>
+                    <td>{courseDisplayName(r.course, r.category)}</td>
                     <td>{new Date(r.created_at).toLocaleString("ar")}</td>
                     <td>
                       <span className="pill">{statusLabel(r.status)}</span>
@@ -145,7 +153,7 @@ export default function HistoryPage() {
       <ConfirmModal
         open={Boolean(deleteId)}
         title="حذف التقرير"
-        message="سيتم حذف التقييم نهائياً من السجل والتقارير."
+        message="هذا الإجراء نهائي. سيتم حذف التقييم وكل نتائجه من النظام."
         confirmLabel="حذف نهائي"
         danger
         busy={busy}

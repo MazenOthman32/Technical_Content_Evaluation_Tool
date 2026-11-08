@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
+import CoursePicker from "@/components/CoursePicker";
 import Skeleton from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { isStaff } from "@/lib/auth/roles";
-import { COURSE_CATALOG, courseLabel, normalizeTags } from "@/lib/categories";
+import { normalizeTags } from "@/lib/categories";
+import { courseDisplayName } from "@/lib/courses";
 import { readOrgMeta } from "@/lib/orgMeta";
 import { exportReviewPdf } from "@/lib/pdfReport";
 import {
@@ -41,7 +43,6 @@ export default function ReportDetailPage() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [tagDraft, setTagDraft] = useState("");
   const [titleDraft, setTitleDraft] = useState("");
-  const [courseDraft, setCourseDraft] = useState("general");
   const [savingMeta, setSavingMeta] = useState(false);
 
   useEffect(() => {
@@ -63,19 +64,21 @@ export default function ReportDetailPage() {
       let { data, error } = await supabase
         .from("reviews")
         .select(
-          "id,video_name,session_title,drive_url,provider,model,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,report,category,tags"
+          "id,video_name,session_title,drive_url,provider,model,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,report,category,tags,course_id,course:courses(id,name,slug)"
         )
         .eq("id", id)
         .maybeSingle();
       if (
         error &&
         (String(error.message || "").includes("category") ||
-          String(error.message || "").includes("session_title"))
+          String(error.message || "").includes("session_title") ||
+          String(error.message || "").includes("course") ||
+          String(error.message || "").includes("courses"))
       ) {
         const fallback = await supabase
           .from("reviews")
           .select(
-            "id,video_name,drive_url,provider,model,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,report"
+            "id,video_name,session_title,drive_url,provider,model,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,report,category,tags"
           )
           .eq("id", id)
           .maybeSingle();
@@ -87,11 +90,10 @@ export default function ReportDetailPage() {
       else if (!data) setErr("التقرير غير موجود");
       else {
         const enriched = { ...(data as ReviewRow), ...readOrgMeta(data as ReviewRow) };
+        const rel = enriched.course as unknown;
+        enriched.course = Array.isArray(rel) ? rel[0] || null : rel || null;
         setRow(enriched);
-        if (first) {
-          setTitleDraft(enriched.session_title || "");
-          setCourseDraft(courseLabel(enriched.category || "general"));
-        }
+        if (first) setTitleDraft(enriched.session_title || "");
         setErr("");
         const st = data.status;
         if (st === "queued" || st === "running" || st === "downloading") {
@@ -141,7 +143,11 @@ export default function ReportDetailPage() {
     }
   }
 
-  async function saveMeta(next: { category?: string; tags?: string[]; session_title?: string }) {
+  async function saveMeta(next: {
+    tags?: string[];
+    session_title?: string;
+    course_id?: string;
+  }) {
     if (!row) return;
     setSavingMeta(true);
     const previous = row;
@@ -158,14 +164,15 @@ export default function ReportDetailPage() {
         prev
           ? {
               ...prev,
-              category: json.category || next.category || prev.category,
+              category: json.category || prev.category,
               tags: json.tags || next.tags || prev.tags,
               session_title: json.session_title ?? next.session_title ?? prev.session_title,
+              course_id: json.course_id ?? next.course_id ?? prev.course_id,
+              course: json.course || prev.course,
             }
           : prev
       );
       if (json.session_title != null) setTitleDraft(json.session_title);
-      if (json.category != null) setCourseDraft(courseLabel(json.category));
       toast.push("تم حفظ بيانات السيشن", "ok");
     } catch (ex: unknown) {
       setRow(previous);
@@ -233,7 +240,7 @@ export default function ReportDetailPage() {
         <div>
           <h1 className="page-title">{displaySessionTitle(row)}</h1>
           <p className="page-sub">
-            {courseLabel(row.category)} · {new Date(row.created_at).toLocaleString("ar")} ·{" "}
+            {courseDisplayName(row.course, row.category)} · {new Date(row.created_at).toLocaleString("ar")} ·{" "}
             {row.provider || "—"} / {row.model || report?.model || "—"}
           </p>
         </div>
@@ -299,32 +306,14 @@ export default function ReportDetailPage() {
               </button>
             </div>
           </label>
-          <label>
-            الكورس
-            <div className="inline-add">
-              <input
-                list="course-catalog"
-                value={courseDraft}
-                onChange={(e) => setCourseDraft(e.target.value)}
-                placeholder="اسم الكورس أو اختر من القائمة"
-                maxLength={80}
-                disabled={savingMeta}
-              />
-              <datalist id="course-catalog">
-                {COURSE_CATALOG.map((c) => (
-                  <option key={c.id} value={c.labelAr} />
-                ))}
-              </datalist>
-              <button
-                className="btn secondary btn-sm"
-                type="button"
-                disabled={savingMeta || !courseDraft.trim() || courseDraft.trim() === (row.category || "")}
-                onClick={() => saveMeta({ category: courseDraft })}
-              >
-                حفظ
-              </button>
-            </div>
-          </label>
+          <CoursePicker
+            value={row.course_id || ""}
+            disabled={savingMeta}
+            onChange={(courseId) => {
+              if (!courseId || courseId === row.course_id) return;
+              saveMeta({ course_id: courseId });
+            }}
+          />
           <label>
             وحدة / وسم
             <div className="inline-add">
@@ -357,7 +346,7 @@ export default function ReportDetailPage() {
           </label>
         </div>
         <div className="tag-row" style={{ marginTop: "0.75rem" }}>
-          <span className="pill">{courseLabel(row.category)}</span>
+          <span className="pill">{courseDisplayName(row.course, row.category)}</span>
           {(row.tags || []).map((t) => (
             <button
               key={t}

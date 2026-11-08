@@ -2,8 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import CoursePicker from "@/components/CoursePicker";
 import { useToast } from "@/components/Toast";
-import { COURSE_CATALOG, normalizeCourseKey, normalizeSessionTitle } from "@/lib/categories";
+import { normalizeSessionTitle } from "@/lib/categories";
+import { Course } from "@/lib/courses";
 import { MODELS } from "@/lib/models";
 import { createClient } from "@/lib/supabase/client";
 
@@ -15,19 +17,14 @@ export default function ReviewPage() {
   const [provider, setProvider] = useState("groq");
   const [model, setModel] = useState(MODELS.groq[0].id);
   const [sessionTitle, setSessionTitle] = useState("");
-  const [category, setCategory] = useState("general");
-  const [customCourse, setCustomCourse] = useState("");
-  const [useCustomCourse, setUseCustomCourse] = useState(false);
+  const [courseId, setCourseId] = useState("");
+  const [course, setCourse] = useState<Course | null>(null);
   const [tags, setTags] = useState("");
   const [fileName, setFileName] = useState("لم يتم اختيار ملف");
   const [fileInputKey, setFileInputKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [processorReady, setProcessorReady] = useState<boolean | null>(null);
   const modelOptions = useMemo(() => MODELS[provider] || [], [provider]);
-  const courseKey = useMemo(
-    () => normalizeCourseKey(useCustomCourse ? customCourse : category),
-    [useCustomCourse, customCourse, category]
-  );
 
   useEffect(() => {
     fetch("/api/process/reviews")
@@ -95,7 +92,7 @@ export default function ReviewPage() {
       if (source === "file" && !file?.name) throw new Error("اختر ملف فيديو");
       const title = normalizeSessionTitle(sessionTitle);
       if (!title) throw new Error("أدخل عنوان السيشن");
-      if (useCustomCourse && !customCourse.trim()) throw new Error("أدخل اسم الكورس");
+      if (!courseId) throw new Error("اختر كورساً");
 
       const health = await fetch("/api/process/reviews").then((r) => r.json()).catch(() => ({ ok: false }));
       const canProcess = Boolean(health.ok);
@@ -105,7 +102,8 @@ export default function ReviewPage() {
       const reviewId = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
       const videoName = source === "file" ? file?.name || "video" : url;
       const tagList = [...new Set(tags.split(",").map((t) => t.trim()).filter(Boolean))].slice(0, 12);
-      const org = { category: courseKey, tags: tagList, session_title: title };
+      const category = course?.slug || "general";
+      const org = { category, tags: tagList, session_title: title, course_id: courseId };
       const basePayload = {
         id: reviewId,
         user_id: auth.user.id,
@@ -119,16 +117,19 @@ export default function ReviewPage() {
       };
       let { error: insertErr } = await supabase.from("reviews").insert({
         ...basePayload,
-        category: courseKey,
+        category,
         tags: tagList,
         session_title: title,
+        course_id: courseId,
       });
       if (
         insertErr &&
         (String(insertErr.message || "").includes("category") ||
-          String(insertErr.message || "").includes("session_title"))
+          String(insertErr.message || "").includes("session_title") ||
+          String(insertErr.message || "").includes("course_id"))
       ) {
-        const retry = await supabase.from("reviews").insert(basePayload);
+        const soft = { ...basePayload };
+        const retry = await supabase.from("reviews").insert(soft);
         insertErr = retry.error;
       }
       if (insertErr) throw new Error(insertErr.message || "تعذر حفظ المراجعة");
@@ -146,7 +147,7 @@ export default function ReviewPage() {
           await supabase.from("reviews").update({ status: "failed" }).eq("id", reviewId);
           throw new Error(data.error || data.detail || "فشل إرسال المهمة للمعالج");
         }
-        toast.push("تم إرسال المراجعة للمعالجة — هتفتح صفحة التقرير", "ok");
+        toast.push("تم إرسال المراجعة للمعالجة", "ok");
       } else {
         toast.push("تم حفظ الطلب. المعالج غير متصل حالياً", "ok");
       }
@@ -167,7 +168,7 @@ export default function ReviewPage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">مراجعة جديدة</h1>
-          <p className="page-sub">ارفع فيديو أو الصق رابط Drive وابدأ تقييم الجودة</p>
+          <p className="page-sub">حدّد عنوان السيشن والكورس، ثم ارفع الفيديو أو الصق رابط Drive</p>
         </div>
       </div>
       <form className="panel form review-form settings-panel" onSubmit={onSubmit}>
@@ -220,11 +221,21 @@ export default function ReviewPage() {
           <input
             value={sessionTitle}
             onChange={(e) => setSessionTitle(e.target.value)}
-            placeholder="مثال: جلسة 3 — React Hooks"
+            placeholder="مثال: Session 1: Introduction to React"
             required
             maxLength={160}
           />
         </label>
+
+        <CoursePicker
+          value={courseId}
+          autoSelectDefault
+          onChange={(id, c) => {
+            setCourseId(id);
+            setCourse(c || null);
+          }}
+          disabled={loading}
+        />
 
         <div className="form-grid">
           <label>
@@ -246,27 +257,6 @@ export default function ReviewPage() {
             </select>
           </label>
           <label>
-            الكورس
-            <select
-              value={useCustomCourse ? "__custom__" : category}
-              onChange={(e) => {
-                if (e.target.value === "__custom__") {
-                  setUseCustomCourse(true);
-                  return;
-                }
-                setUseCustomCourse(false);
-                setCategory(e.target.value);
-              }}
-            >
-              {COURSE_CATALOG.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.labelAr}
-                </option>
-              ))}
-              <option value="__custom__">كورس مخصص...</option>
-            </select>
-          </label>
-          <label>
             وحدات / وسوم (مفصولة بفاصلة)
             <input
               value={tags}
@@ -275,19 +265,6 @@ export default function ReviewPage() {
             />
           </label>
         </div>
-
-        {useCustomCourse ? (
-          <label>
-            اسم الكورس المخصص
-            <input
-              value={customCourse}
-              onChange={(e) => setCustomCourse(e.target.value)}
-              placeholder="مثال: React Bootcamp — دفعة مارس"
-              required
-              maxLength={80}
-            />
-          </label>
-        ) : null}
 
         <button className="btn" type="submit" disabled={loading}>
           {loading ? <><span className="spinner" /> جاري الإرسال...</> : "بدء المراجعة"}

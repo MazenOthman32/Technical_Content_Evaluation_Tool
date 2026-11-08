@@ -1,6 +1,6 @@
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
-import { courseLabel } from "@/lib/categories";
+import { courseDisplayName } from "@/lib/courses";
 import {
   Finding,
   ReportPayload,
@@ -64,7 +64,7 @@ function buildPrintHtml(row: ReviewRow, logoDataUrl: string) {
   const findings = (report.findings || []) as Finding[];
   const counts = countBySeverity(findings);
   const tags = (row.tags || []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join(" ");
-  const course = courseLabel(row.category);
+  const course = courseDisplayName(row.course, row.category);
   const sessionTitle = displaySessionTitle(row);
   const logo = logoDataUrl
     ? `<img src="${logoDataUrl}" alt="Instant Plus" style="height:42px;width:auto;max-width:190px;object-fit:contain;display:block;margin-bottom:14px;" />`
