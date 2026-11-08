@@ -2,8 +2,13 @@
 
 ## 1) Supabase
 
-1. أنشئ مشروع في [supabase.com](https://supabase.com)
-2. افتح SQL Editor ونفّذ ملف [`supabase/schema.sql`](supabase/schema.sql)
+المشروع الحالي: `ezvttuiqxswzrqyzogak`
+
+1. افتح SQL Editor ونفّذ ملف [`supabase/schema.sql`](supabase/schema.sql)
+2. من **Project Settings → API** انسخ:
+   - Project URL: `https://ezvttuiqxswzrqyzogak.supabase.co`
+   - `anon` key
+   - `service_role` key
 3. من Authentication → Users أنشئ حسابين:
    - Admin: مثلاً `admin@instantplus.com` مع User Metadata:
      ```json
@@ -13,7 +18,8 @@
      ```json
      { "username": "reviewer", "full_name": "Content Reviewer", "role": "reviewer" }
      ```
-4. انسخ Project URL + anon key + service role key
+4. (اختياري للـ DB المباشر) connection string:
+   `postgresql://postgres:[PASSWORD]@db.ezvttuiqxswzrqyzogak.supabase.co:5432/postgres`
 
 ## 2) الواجهة على Vercel
 
