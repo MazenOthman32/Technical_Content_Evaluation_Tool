@@ -103,8 +103,9 @@ export default function SettingsPage() {
 
   async function saveSettings(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = e.currentTarget;
     setLoading(true);
-    const fd = new FormData(e.currentTarget);
+    const fd = new FormData(form);
     try {
       const supabase = createClient();
       const { data: auth } = await supabase.auth.getUser();
@@ -130,7 +131,7 @@ export default function SettingsPage() {
       const { error } = await supabase.from("user_settings").upsert(payload);
       if (error) throw error;
       toast.push("تم حفظ الإعدادات", "ok");
-      e.currentTarget.reset();
+      form?.reset?.();
       await loadSettings();
     } catch (ex: unknown) {
       toast.push(ex instanceof Error ? ex.message : "فشل الحفظ", "error");
@@ -153,8 +154,9 @@ export default function SettingsPage() {
 
   async function createUser(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = e.currentTarget;
     setLoading(true);
-    const fd = new FormData(e.currentTarget);
+    const fd = new FormData(form);
     try {
       const res = await fetch("/api/admin/users", {
         method: "POST",
@@ -174,7 +176,7 @@ export default function SettingsPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "فشل الإنشاء");
       toast.push(`تم إنشاء ${json.email}`, "ok");
-      e.currentTarget.reset();
+      form?.reset?.();
       await loadUsers();
     } catch (ex: unknown) {
       toast.push(ex instanceof Error ? ex.message : "فشل", "error");

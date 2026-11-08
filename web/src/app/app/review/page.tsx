@@ -8,15 +8,20 @@ import { createClient } from "@/lib/supabase/client";
 export default function ReviewPage() {
   const toast = useToast();
   const [source, setSource] = useState<"drive" | "file">("drive");
+  const [driveUrl, setDriveUrl] = useState("");
   const [provider, setProvider] = useState("groq");
   const [model, setModel] = useState(MODELS.groq[0].id);
   const [fileName, setFileName] = useState("لم يتم اختيار ملف");
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [loading, setLoading] = useState(false);
-  const processApi = process.env.NEXT_PUBLIC_PROCESS_API_URL || "";
+  const processApi = (process.env.NEXT_PUBLIC_PROCESS_API_URL || "").replace(/\/$/, "");
   const modelOptions = useMemo(() => MODELS[provider] || [], [provider]);
 
   useEffect(() => {
-    setModel(modelOptions[0]?.id || "");
+    setModel((prev) => {
+      if (modelOptions.some((m) => m.id === prev)) return prev;
+      return modelOptions[0]?.id || "";
+    });
   }, [provider, modelOptions]);
 
   useEffect(() => {
@@ -34,11 +39,18 @@ export default function ReviewPage() {
     })();
   }, []);
 
+  function clearForm() {
+    setDriveUrl("");
+    setFileName("لم يتم اختيار ملف");
+    setFileInputKey((k) => k + 1);
+  }
+
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = e.currentTarget;
     setLoading(true);
-    const fd = new FormData(e.currentTarget);
-    const driveUrl = String(fd.get("drive_url") || "").trim();
+    const fd = new FormData(form);
+    const url = driveUrl.trim();
     const file = (fd.get("video") as File | null) || null;
 
     try {
@@ -60,27 +72,28 @@ export default function ReviewPage() {
             : settings?.anthropic_api_key;
       if (!key) throw new Error("أضف مفتاح API من الإعدادات أولاً");
 
-      if (source === "drive" && !driveUrl) throw new Error("الصق لينك Google Drive");
+      if (source === "drive" && !url) throw new Error("الصق لينك Google Drive");
       if (source === "file" && !file?.name) throw new Error("اختر ملف فيديو");
 
       const started = Date.now();
       const reviewId = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
-      await supabase.from("reviews").insert({
+      const { error: insertErr } = await supabase.from("reviews").insert({
         id: reviewId,
         user_id: auth.user.id,
-        video_name: source === "file" ? file?.name : driveUrl,
-        drive_url: source === "drive" ? driveUrl : null,
+        video_name: source === "file" ? file?.name : url,
+        drive_url: source === "drive" ? url : null,
         provider,
         model,
         status: processApi ? "queued" : "awaiting_backend",
         duration_ms: Date.now() - started,
       });
+      if (insertErr) throw new Error(insertErr.message || "تعذر حفظ المراجعة");
 
       if (processApi) {
         const body = new FormData();
         body.set("provider", provider);
         body.set("model", model);
-        body.set("drive_url", source === "drive" ? driveUrl : "");
+        body.set("drive_url", source === "drive" ? url : "");
         if (source === "file" && file) body.set("video", file);
         const session = await supabase.auth.getSession();
         const res = await fetch(`${processApi}/api/reviews`, {
@@ -90,14 +103,18 @@ export default function ReviewPage() {
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.detail || "فشل إرسال المهمة للمعالج");
+          throw new Error(
+            (typeof data.detail === "string" && data.detail) ||
+              data.error ||
+              "فشل إرسال المهمة للمعالج"
+          );
         }
         toast.push("تم إرسال المراجعة للمعالجة", "ok");
       } else {
-        toast.push("تم حفظ الطلب. اربط NEXT_PUBLIC_PROCESS_API_URL للمعالجة الكاملة", "info");
+        toast.push("تم حفظ المراجعة في السجل. شغّل معالج الفيديو لإكمال التحليل", "ok");
       }
-      e.currentTarget.reset();
-      setFileName("لم يتم اختيار ملف");
+      form?.reset?.();
+      clearForm();
     } catch (ex: unknown) {
       toast.push(ex instanceof Error ? ex.message : "حدث خطأ", "error");
     } finally {
@@ -126,12 +143,19 @@ export default function ReviewPage() {
         {source === "drive" ? (
           <label>
             لينك Drive
-            <input name="drive_url" type="url" placeholder="https://drive.google.com/file/d/..." />
+            <input
+              name="drive_url"
+              type="url"
+              value={driveUrl}
+              onChange={(e) => setDriveUrl(e.target.value)}
+              placeholder="https://drive.google.com/file/d/..."
+            />
           </label>
         ) : (
           <label className="drop">
             اسحب الفيديو أو اختر ملفاً
             <input
+              key={fileInputKey}
               name="video"
               type="file"
               accept="video/*"
