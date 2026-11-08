@@ -11,8 +11,8 @@ export default function Logo({ compact = false, tone = "light" }: LogoProps) {
         <svg viewBox="0 0 168 40" role="img" focusable="false" preserveAspectRatio="xMidYMid meet">
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#6366f1" />
-              <stop offset="100%" stopColor="#0d9488" />
+              <stop offset="0%" stopColor="#4338ca" />
+              <stop offset="100%" stopColor="#0f766e" />
             </linearGradient>
           </defs>
           <rect x="0" y="4" width="32" height="32" rx="10" fill={`url(#${gradId})`} />

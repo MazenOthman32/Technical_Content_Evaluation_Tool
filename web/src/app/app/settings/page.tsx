@@ -18,27 +18,45 @@ type ManagedUser = {
   keys: Record<string, { state: "missing" | "saved" | "verified"; label: string; masked: string }>;
 };
 
+type KeyUi = ReturnType<typeof keyStatus>;
+
+const emptyEdit = {
+  id: "",
+  full_name: "",
+  username: "",
+  email: "",
+  role: "reviewer",
+  is_active: true,
+  password: "",
+  anthropic_api_key: "",
+  groq_api_key: "",
+  openai_api_key: "",
+};
+
 export default function SettingsPage() {
   const toast = useToast();
   const [tab, setTab] = useState<"keys" | "prefs" | "users">("keys");
   const [role, setRole] = useState("reviewer");
+  const [myId, setMyId] = useState("");
   const [provider, setProvider] = useState("groq");
   const [model, setModel] = useState(MODELS.groq[0].id);
   const [whisper, setWhisper] = useState("auto");
   const [maxCost, setMaxCost] = useState("");
-  type KeyUi = ReturnType<typeof keyStatus>;
   const [anthropic, setAnthropic] = useState<KeyUi>({ state: "missing", label: "غير مضبوط", has: false });
   const [groq, setGroq] = useState<KeyUi>({ state: "missing", label: "غير مضبوط", has: false });
   const [openai, setOpenai] = useState<KeyUi>({ state: "missing", label: "غير مضبوط", has: false });
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [usersErr, setUsersErr] = useState("");
+  const [editing, setEditing] = useState<typeof emptyEdit | null>(null);
   const options = useMemo(() => MODELS[provider] || [], [provider]);
+  const isSuper = role === "super_admin";
 
   async function loadSettings() {
     const supabase = createClient();
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) return;
+    setMyId(auth.user.id);
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
@@ -165,6 +183,101 @@ export default function SettingsPage() {
     }
   }
 
+  function openEdit(u: ManagedUser) {
+    setEditing({
+      id: u.id,
+      full_name: u.full_name || "",
+      username: u.username || "",
+      email: u.email || "",
+      role: u.role,
+      is_active: u.is_active,
+      password: "",
+      anthropic_api_key: "",
+      groq_api_key: "",
+      openai_api_key: "",
+    });
+  }
+
+  async function saveEdit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editing || !isSuper) return;
+    setLoading(true);
+    try {
+      const payload: Record<string, unknown> = {
+        full_name: editing.full_name,
+        username: editing.username,
+        email: editing.email,
+        role: editing.role,
+        is_active: editing.is_active,
+      };
+      if (editing.password.trim()) payload.password = editing.password.trim();
+      if (editing.anthropic_api_key.trim()) payload.anthropic_api_key = editing.anthropic_api_key.trim();
+      if (editing.groq_api_key.trim()) payload.groq_api_key = editing.groq_api_key.trim();
+      if (editing.openai_api_key.trim()) payload.openai_api_key = editing.openai_api_key.trim();
+
+      const res = await fetch(`/api/admin/users/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "فشل التعديل");
+      toast.push("تم تحديث الحساب", "ok");
+      setEditing(null);
+      await loadUsers();
+    } catch (ex: unknown) {
+      toast.push(ex instanceof Error ? ex.message : "فشل", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function removeUser(u: ManagedUser) {
+    if (!isSuper) return;
+    if (u.id === myId) {
+      toast.push("لا يمكن حذف حسابك الحالي", "error");
+      return;
+    }
+    if (!window.confirm(`حذف الحساب ${u.email} نهائيًا؟`)) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users/${u.id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "فشل الحذف");
+      toast.push("تم حذف الحساب", "ok");
+      if (editing?.id === u.id) setEditing(null);
+      await loadUsers();
+    } catch (ex: unknown) {
+      toast.push(ex instanceof Error ? ex.message : "فشل", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggleActive(u: ManagedUser) {
+    if (!isSuper) return;
+    if (u.id === myId && u.is_active) {
+      toast.push("لا يمكن تعطيل حسابك الحالي", "error");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users/${u.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: !u.is_active }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "فشل التحديث");
+      toast.push(u.is_active ? "تم تعطيل الحساب" : "تم تفعيل الحساب", "ok");
+      await loadUsers();
+    } catch (ex: unknown) {
+      toast.push(ex instanceof Error ? ex.message : "فشل", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="page-fill settings-page">
       <div className="page-head">
@@ -192,11 +305,11 @@ export default function SettingsPage() {
         <form className="panel form settings-panel" onSubmit={saveSettings}>
           {tab === "keys" ? (
             <>
-              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>واجهة إدارة المفاتيح</h2>
+              <h2 className="section-title">واجهة إدارة المفاتيح</h2>
               <p className="help">المفاتيح محفوظة لحسابك فقط. اترك الحقل فارغًا للإبقاء على القيمة الحالية.</p>
               <div className="form-grid">
                 <label>
-                  <span style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span className="label-row">
                     Anthropic <KeyBadge state={anthropic.state} label={anthropic.label} />
                   </span>
                   <input name="anthropic_api_key" type="password" placeholder="sk-ant-..." autoComplete="off" />
@@ -205,7 +318,7 @@ export default function SettingsPage() {
                   </button>
                 </label>
                 <label>
-                  <span style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span className="label-row">
                     Groq <KeyBadge state={groq.state} label={groq.label} />
                   </span>
                   <input name="groq_api_key" type="password" placeholder="gsk_..." autoComplete="off" />
@@ -214,7 +327,7 @@ export default function SettingsPage() {
                   </button>
                 </label>
                 <label>
-                  <span style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span className="label-row">
                     OpenAI <KeyBadge state={openai.state} label={openai.label} />
                   </span>
                   <input name="openai_api_key" type="password" placeholder="sk-..." autoComplete="off" />
@@ -226,7 +339,7 @@ export default function SettingsPage() {
             </>
           ) : (
             <>
-              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>تفضيلات المراجعة</h2>
+              <h2 className="section-title">تفضيلات المراجعة</h2>
               <div className="form-grid">
                 <label>
                   المزود الافتراضي
@@ -269,7 +382,13 @@ export default function SettingsPage() {
             </>
           )}
           <button className="btn" type="submit" disabled={loading}>
-            {loading ? <><span className="spinner" /> جاري الحفظ...</> : "حفظ"}
+            {loading ? (
+              <>
+                <span className="spinner" /> جاري الحفظ...
+              </>
+            ) : (
+              "حفظ"
+            )}
           </button>
         </form>
       )}
@@ -277,10 +396,10 @@ export default function SettingsPage() {
       {tab === "users" && isStaff(role) ? (
         <div className="users-stack">
           <form className="panel form settings-panel" onSubmit={createUser}>
-            <h2 style={{ margin: 0, fontSize: "1.05rem" }}>إنشاء مستخدم جديد</h2>
+            <h2 className="section-title">إنشاء مستخدم جديد</h2>
             <p className="help">
-              {role === "super_admin"
-                ? "Super Admin يقدر يضيف Super Admin أو Admin أو Reviewer. الحسابات تتعمل على Supabase Auth."
+              {isSuper
+                ? "Super Admin يقدر يضيف/يعدل/يحذف أي حساب على Supabase Auth."
                 : "الأدمن يقدر يضيف Reviewer فقط."}
             </p>
             <div className="form-grid">
@@ -304,7 +423,7 @@ export default function SettingsPage() {
                 الدور
                 <select name="role" defaultValue="reviewer">
                   <option value="reviewer">Reviewer</option>
-                  {role === "super_admin" ? (
+                  {isSuper ? (
                     <>
                       <option value="admin">Admin</option>
                       <option value="super_admin">Super Admin</option>
@@ -334,12 +453,18 @@ export default function SettingsPage() {
               </label>
             </div>
             <button className="btn" type="submit" disabled={loading}>
-              {loading ? <><span className="spinner" /> جاري الإنشاء...</> : "إنشاء الحساب"}
+              {loading ? (
+                <>
+                  <span className="spinner" /> جاري الإنشاء...
+                </>
+              ) : (
+                "إنشاء الحساب"
+              )}
             </button>
           </form>
 
           <div className="panel">
-            <h2 style={{ margin: "0 0 0.8rem", fontSize: "1.05rem" }}>المستخدمون</h2>
+            <h2 className="section-title">المستخدمون</h2>
             {usersErr ? <div className="banner error">{usersErr}</div> : null}
             <div className="table-scroll">
               <table className="table">
@@ -347,9 +472,11 @@ export default function SettingsPage() {
                   <tr>
                     <th>المستخدم</th>
                     <th>الدور</th>
+                    <th>الحالة</th>
                     <th>Anthropic</th>
                     <th>Groq</th>
                     <th>OpenAI</th>
+                    {isSuper ? <th>إجراءات</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -363,6 +490,11 @@ export default function SettingsPage() {
                         <span className="pill">{u.role}</span>
                       </td>
                       <td>
+                        <span className={`pill ${u.is_active ? "pill-ok" : "pill-danger"}`}>
+                          {u.is_active ? "نشط" : "معطّل"}
+                        </span>
+                      </td>
+                      <td>
                         <KeyBadge state={u.keys.anthropic.state} label={u.keys.anthropic.label} />
                         <div className="help">{u.keys.anthropic.masked || "—"}</div>
                       </td>
@@ -374,12 +506,146 @@ export default function SettingsPage() {
                         <KeyBadge state={u.keys.openai.state} label={u.keys.openai.label} />
                         <div className="help">{u.keys.openai.masked || "—"}</div>
                       </td>
+                      {isSuper ? (
+                        <td>
+                          <div className="row-actions">
+                            <button className="btn secondary btn-sm" type="button" onClick={() => openEdit(u)}>
+                              تعديل
+                            </button>
+                            <button className="btn secondary btn-sm" type="button" onClick={() => toggleActive(u)}>
+                              {u.is_active ? "تعطيل" : "تفعيل"}
+                            </button>
+                            <button
+                              className="btn secondary btn-sm btn-danger"
+                              type="button"
+                              onClick={() => removeUser(u)}
+                              disabled={u.id === myId}
+                            >
+                              حذف
+                            </button>
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </div>
+
+          {editing && isSuper ? (
+            <div className="modal-backdrop" onClick={() => setEditing(null)}>
+              <form
+                className="panel form modal-card"
+                onClick={(e) => e.stopPropagation()}
+                onSubmit={saveEdit}
+              >
+                <div className="modal-head">
+                  <h2 className="section-title">تعديل الحساب</h2>
+                  <button className="icon-btn" type="button" onClick={() => setEditing(null)} aria-label="إغلاق">
+                    ✕
+                  </button>
+                </div>
+                <div className="form-grid">
+                  <label>
+                    الاسم الكامل
+                    <input
+                      value={editing.full_name}
+                      onChange={(e) => setEditing({ ...editing, full_name: e.target.value })}
+                      required
+                    />
+                  </label>
+                  <label>
+                    اسم المستخدم
+                    <input
+                      value={editing.username}
+                      onChange={(e) => setEditing({ ...editing, username: e.target.value })}
+                      required
+                    />
+                  </label>
+                  <label>
+                    البريد
+                    <input
+                      type="email"
+                      value={editing.email}
+                      onChange={(e) => setEditing({ ...editing, email: e.target.value })}
+                      required
+                    />
+                  </label>
+                  <label>
+                    الدور
+                    <select
+                      value={editing.role}
+                      onChange={(e) => setEditing({ ...editing, role: e.target.value })}
+                    >
+                      <option value="reviewer">Reviewer</option>
+                      <option value="admin">Admin</option>
+                      <option value="super_admin">Super Admin</option>
+                    </select>
+                  </label>
+                  <label>
+                    كلمة مرور جديدة (اختياري)
+                    <input
+                      type="password"
+                      value={editing.password}
+                      onChange={(e) => setEditing({ ...editing, password: e.target.value })}
+                      minLength={8}
+                      placeholder="اتركها فارغة للإبقاء"
+                    />
+                  </label>
+                  <label className="check-row">
+                    <span>الحساب نشط</span>
+                    <input
+                      type="checkbox"
+                      checked={editing.is_active}
+                      onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })}
+                    />
+                  </label>
+                  <label>
+                    Anthropic (اختياري)
+                    <input
+                      type="password"
+                      value={editing.anthropic_api_key}
+                      onChange={(e) => setEditing({ ...editing, anthropic_api_key: e.target.value })}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label>
+                    Groq (اختياري)
+                    <input
+                      type="password"
+                      value={editing.groq_api_key}
+                      onChange={(e) => setEditing({ ...editing, groq_api_key: e.target.value })}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label>
+                    OpenAI (اختياري)
+                    <input
+                      type="password"
+                      value={editing.openai_api_key}
+                      onChange={(e) => setEditing({ ...editing, openai_api_key: e.target.value })}
+                      autoComplete="off"
+                    />
+                  </label>
+                </div>
+                <div className="row-actions">
+                  <button className="btn" type="submit" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <span className="spinner" /> جاري الحفظ...
+                      </>
+                    ) : (
+                      "حفظ التعديلات"
+                    )}
+                  </button>
+                  <button className="btn secondary" type="button" onClick={() => setEditing(null)}>
+                    إلغاء
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
