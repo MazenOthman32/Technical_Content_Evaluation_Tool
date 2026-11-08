@@ -15,6 +15,7 @@ import {
   ReportPayload,
   ReviewRow,
   countBySeverity,
+  displaySessionTitle,
   hasReportContent,
   severityLabel,
   statusLabel,
@@ -39,6 +40,8 @@ export default function ReportDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [tagDraft, setTagDraft] = useState("");
+  const [titleDraft, setTitleDraft] = useState("");
+  const [courseDraft, setCourseDraft] = useState("general");
   const [savingMeta, setSavingMeta] = useState(false);
 
   useEffect(() => {
@@ -60,11 +63,15 @@ export default function ReportDetailPage() {
       let { data, error } = await supabase
         .from("reviews")
         .select(
-          "id,video_name,drive_url,provider,model,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,report,category,tags"
+          "id,video_name,session_title,drive_url,provider,model,status,proposed_verdict,findings_count,quality_score,duration_ms,cost,created_at,report,category,tags"
         )
         .eq("id", id)
         .maybeSingle();
-      if (error && String(error.message || "").includes("category")) {
+      if (
+        error &&
+        (String(error.message || "").includes("category") ||
+          String(error.message || "").includes("session_title"))
+      ) {
         const fallback = await supabase
           .from("reviews")
           .select(
@@ -81,6 +88,10 @@ export default function ReportDetailPage() {
       else {
         const enriched = { ...(data as ReviewRow), ...readOrgMeta(data as ReviewRow) };
         setRow(enriched);
+        if (first) {
+          setTitleDraft(enriched.session_title || "");
+          setCourseDraft(courseLabel(enriched.category || "general"));
+        }
         setErr("");
         const st = data.status;
         if (st === "queued" || st === "running" || st === "downloading") {
@@ -130,7 +141,7 @@ export default function ReportDetailPage() {
     }
   }
 
-  async function saveMeta(next: { category?: string; tags?: string[] }) {
+  async function saveMeta(next: { category?: string; tags?: string[]; session_title?: string }) {
     if (!row) return;
     setSavingMeta(true);
     const previous = row;
@@ -149,10 +160,13 @@ export default function ReportDetailPage() {
               ...prev,
               category: json.category || next.category || prev.category,
               tags: json.tags || next.tags || prev.tags,
+              session_title: json.session_title ?? next.session_title ?? prev.session_title,
             }
           : prev
       );
-      toast.push("تم تحديث التصنيف", "ok");
+      if (json.session_title != null) setTitleDraft(json.session_title);
+      if (json.category != null) setCourseDraft(courseLabel(json.category));
+      toast.push("تم حفظ بيانات السيشن", "ok");
     } catch (ex: unknown) {
       setRow(previous);
       toast.push(ex instanceof Error ? ex.message : "فشل الحفظ", "error");
@@ -217,9 +231,9 @@ export default function ReportDetailPage() {
     <div className="page-fill">
       <div className="page-head">
         <div>
-          <h1 className="page-title">{row.video_name || row.id}</h1>
+          <h1 className="page-title">{displaySessionTitle(row)}</h1>
           <p className="page-sub">
-            {new Date(row.created_at).toLocaleString("ar")} · {courseLabel(row.category)} ·{" "}
+            {courseLabel(row.category)} · {new Date(row.created_at).toLocaleString("ar")} ·{" "}
             {row.provider || "—"} / {row.model || report?.model || "—"}
           </p>
         </div>
@@ -266,18 +280,50 @@ export default function ReportDetailPage() {
       <div className="panel meta-editor settings-panel">
         <div className="form-grid">
           <label>
+            عنوان السيشن
+            <div className="inline-add">
+              <input
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                placeholder="عنوان واضح للسيشن"
+                maxLength={160}
+                disabled={savingMeta}
+              />
+              <button
+                className="btn secondary btn-sm"
+                type="button"
+                disabled={savingMeta || !titleDraft.trim() || titleDraft.trim() === (row.session_title || "")}
+                onClick={() => saveMeta({ session_title: titleDraft })}
+              >
+                حفظ
+              </button>
+            </div>
+          </label>
+          <label>
             الكورس
-            <select
-              value={row.category || "general"}
-              disabled={savingMeta}
-              onChange={(e) => saveMeta({ category: e.target.value })}
-            >
-              {COURSE_CATALOG.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.labelAr}
-                </option>
-              ))}
-            </select>
+            <div className="inline-add">
+              <input
+                list="course-catalog"
+                value={courseDraft}
+                onChange={(e) => setCourseDraft(e.target.value)}
+                placeholder="اسم الكورس أو اختر من القائمة"
+                maxLength={80}
+                disabled={savingMeta}
+              />
+              <datalist id="course-catalog">
+                {COURSE_CATALOG.map((c) => (
+                  <option key={c.id} value={c.labelAr} />
+                ))}
+              </datalist>
+              <button
+                className="btn secondary btn-sm"
+                type="button"
+                disabled={savingMeta || !courseDraft.trim() || courseDraft.trim() === (row.category || "")}
+                onClick={() => saveMeta({ category: courseDraft })}
+              >
+                حفظ
+              </button>
+            </div>
           </label>
           <label>
             وحدة / وسم
@@ -311,6 +357,7 @@ export default function ReportDetailPage() {
           </label>
         </div>
         <div className="tag-row" style={{ marginTop: "0.75rem" }}>
+          <span className="pill">{courseLabel(row.category)}</span>
           {(row.tags || []).map((t) => (
             <button
               key={t}

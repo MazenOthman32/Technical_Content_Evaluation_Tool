@@ -6,6 +6,7 @@ import {
   ReportPayload,
   ReviewRow,
   countBySeverity,
+  displaySessionTitle,
   severityLabel,
   statusLabel,
   verdictLabel,
@@ -64,6 +65,7 @@ function buildPrintHtml(row: ReviewRow, logoDataUrl: string) {
   const counts = countBySeverity(findings);
   const tags = (row.tags || []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join(" ");
   const course = courseLabel(row.category);
+  const sessionTitle = displaySessionTitle(row);
   const logo = logoDataUrl
     ? `<img src="${logoDataUrl}" alt="Instant Plus" style="height:42px;width:auto;max-width:190px;object-fit:contain;display:block;margin-bottom:14px;" />`
     : `<div style="font-weight:800;font-size:22px;color:#001F82;margin-bottom:14px;">Instant<span style="position:relative;">+</span></div>`;
@@ -90,8 +92,8 @@ function buildPrintHtml(row: ReviewRow, logoDataUrl: string) {
     <header style="display:flex;justify-content:space-between;align-items:flex-start;gap:18px;border-bottom:1px solid #e2e8f0;padding-bottom:18px;margin-bottom:20px;">
       <div style="min-width:0;flex:1;">
         ${logo}
-        <h1 class="ar" style="margin:0;font-size:24px;letter-spacing:0;font-weight:700;">تقرير تقييم محتوى تقني</h1>
-        <p class="ar" style="margin:8px 0 0;color:#64748b;font-size:14px;">${escapeHtml(row.video_name || row.id)}</p>
+        <h1 class="ar" style="margin:0;font-size:24px;letter-spacing:0;font-weight:700;">${escapeHtml(sessionTitle)}</h1>
+        <p class="ar" style="margin:8px 0 0;color:#64748b;font-size:14px;">تقرير تقييم محتوى تقني</p>
       </div>
       <div style="text-align:left;color:#64748b;font-size:12px;white-space:nowrap;">
         <div>${escapeHtml(new Date(row.created_at).toLocaleString("ar-EG"))}</div>
@@ -108,6 +110,7 @@ function buildPrintHtml(row: ReviewRow, logoDataUrl: string) {
 
     <section class="panel">
       <h2 class="ar">الملخص التنفيذي</h2>
+      <p class="ar">عنوان السيشن: <strong>${escapeHtml(sessionTitle)}</strong></p>
       <p class="ar">الكورس: <strong>${escapeHtml(course)}</strong></p>
       <p class="ar">المزوّد / النموذج: <strong>${escapeHtml(row.provider || "—")} / ${escapeHtml(row.model || report.model || "—")}</strong></p>
       <p class="ar">توزيع الخطورة: حرج ${counts.critical} · متوسط ${counts.medium} · بسيط ${counts.minor} · غير مؤكد ${counts.unsure}</p>
@@ -142,7 +145,7 @@ function buildPrintHtml(row: ReviewRow, logoDataUrl: string) {
 }
 
 function safeFileName(row: ReviewRow) {
-  return `${(row.video_name || row.id).replace(/[^\w\u0600-\u06FF.-]+/g, "_").slice(0, 80)}.pdf`;
+  return `${displaySessionTitle(row).replace(/[^\w\u0600-\u06FF.-]+/g, "_").slice(0, 80)}.pdf`;
 }
 
 async function renderPdfBlob(row: ReviewRow): Promise<Blob> {

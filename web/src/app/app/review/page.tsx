@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
-import { COURSE_CATALOG } from "@/lib/categories";
+import { COURSE_CATALOG, normalizeCourseKey, normalizeSessionTitle } from "@/lib/categories";
 import { MODELS } from "@/lib/models";
 import { createClient } from "@/lib/supabase/client";
 
@@ -14,13 +14,20 @@ export default function ReviewPage() {
   const [driveUrl, setDriveUrl] = useState("");
   const [provider, setProvider] = useState("groq");
   const [model, setModel] = useState(MODELS.groq[0].id);
+  const [sessionTitle, setSessionTitle] = useState("");
   const [category, setCategory] = useState("general");
+  const [customCourse, setCustomCourse] = useState("");
+  const [useCustomCourse, setUseCustomCourse] = useState(false);
   const [tags, setTags] = useState("");
   const [fileName, setFileName] = useState("لم يتم اختيار ملف");
   const [fileInputKey, setFileInputKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [processorReady, setProcessorReady] = useState<boolean | null>(null);
   const modelOptions = useMemo(() => MODELS[provider] || [], [provider]);
+  const courseKey = useMemo(
+    () => normalizeCourseKey(useCustomCourse ? customCourse : category),
+    [useCustomCourse, customCourse, category]
+  );
 
   useEffect(() => {
     fetch("/api/process/reviews")
@@ -86,6 +93,9 @@ export default function ReviewPage() {
 
       if (source === "drive" && !url) throw new Error("الصق لينك Google Drive");
       if (source === "file" && !file?.name) throw new Error("اختر ملف فيديو");
+      const title = normalizeSessionTitle(sessionTitle);
+      if (!title) throw new Error("أدخل عنوان السيشن");
+      if (useCustomCourse && !customCourse.trim()) throw new Error("أدخل اسم الكورس");
 
       const health = await fetch("/api/process/reviews").then((r) => r.json()).catch(() => ({ ok: false }));
       const canProcess = Boolean(health.ok);
@@ -95,6 +105,7 @@ export default function ReviewPage() {
       const reviewId = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
       const videoName = source === "file" ? file?.name || "video" : url;
       const tagList = [...new Set(tags.split(",").map((t) => t.trim()).filter(Boolean))].slice(0, 12);
+      const org = { category: courseKey, tags: tagList, session_title: title };
       const basePayload = {
         id: reviewId,
         user_id: auth.user.id,
@@ -104,14 +115,19 @@ export default function ReviewPage() {
         model,
         status: canProcess ? "queued" : "awaiting_backend",
         duration_ms: Date.now() - started,
-        report: { _org: { category, tags: tagList } },
+        report: { _org: org },
       };
       let { error: insertErr } = await supabase.from("reviews").insert({
         ...basePayload,
-        category,
+        category: courseKey,
         tags: tagList,
+        session_title: title,
       });
-      if (insertErr && String(insertErr.message || "").includes("category")) {
+      if (
+        insertErr &&
+        (String(insertErr.message || "").includes("category") ||
+          String(insertErr.message || "").includes("session_title"))
+      ) {
         const retry = await supabase.from("reviews").insert(basePayload);
         insertErr = retry.error;
       }
@@ -136,6 +152,8 @@ export default function ReviewPage() {
       }
       form?.reset?.();
       clearForm();
+      setSessionTitle("");
+      setTags("");
       router.push(`/app/reports/${encodeURIComponent(reviewId)}`);
     } catch (ex: unknown) {
       toast.push(ex instanceof Error ? ex.message : "حدث خطأ", "error");
@@ -197,6 +215,17 @@ export default function ReviewPage() {
           </label>
         )}
 
+        <label>
+          عنوان السيشن
+          <input
+            value={sessionTitle}
+            onChange={(e) => setSessionTitle(e.target.value)}
+            placeholder="مثال: جلسة 3 — React Hooks"
+            required
+            maxLength={160}
+          />
+        </label>
+
         <div className="form-grid">
           <label>
             المزود
@@ -218,12 +247,23 @@ export default function ReviewPage() {
           </label>
           <label>
             الكورس
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+            <select
+              value={useCustomCourse ? "__custom__" : category}
+              onChange={(e) => {
+                if (e.target.value === "__custom__") {
+                  setUseCustomCourse(true);
+                  return;
+                }
+                setUseCustomCourse(false);
+                setCategory(e.target.value);
+              }}
+            >
               {COURSE_CATALOG.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.labelAr}
                 </option>
               ))}
+              <option value="__custom__">كورس مخصص...</option>
             </select>
           </label>
           <label>
@@ -235,6 +275,19 @@ export default function ReviewPage() {
             />
           </label>
         </div>
+
+        {useCustomCourse ? (
+          <label>
+            اسم الكورس المخصص
+            <input
+              value={customCourse}
+              onChange={(e) => setCustomCourse(e.target.value)}
+              placeholder="مثال: React Bootcamp — دفعة مارس"
+              required
+              maxLength={80}
+            />
+          </label>
+        ) : null}
 
         <button className="btn" type="submit" disabled={loading}>
           {loading ? <><span className="spinner" /> جاري الإرسال...</> : "بدء المراجعة"}

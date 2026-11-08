@@ -50,6 +50,7 @@ export type ReportPayload = {
 export type ReviewRow = {
   id: string;
   video_name: string | null;
+  session_title?: string | null;
   drive_url?: string | null;
   provider?: string | null;
   model?: string | null;
@@ -64,6 +65,10 @@ export type ReviewRow = {
   category?: string | null;
   tags?: string[] | null;
 };
+
+export function displaySessionTitle(row: Pick<ReviewRow, "session_title" | "video_name" | "id">) {
+  return row.session_title?.trim() || row.video_name || row.id;
+}
 
 export function verdictLabel(v?: string | null) {
   switch (v) {

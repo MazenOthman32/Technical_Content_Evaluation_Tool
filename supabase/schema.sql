@@ -63,9 +63,11 @@ alter table public.reviews add column if not exists quality_score numeric null;
 alter table public.reviews add column if not exists duration_ms int null;
 alter table public.reviews add column if not exists category text not null default 'general';
 alter table public.reviews add column if not exists tags text[] not null default '{}';
+alter table public.reviews add column if not exists session_title text;
 
 create index if not exists reviews_category_idx on public.reviews (category);
 create index if not exists reviews_tags_idx on public.reviews using gin (tags);
+create index if not exists reviews_session_title_idx on public.reviews (session_title);
 
 do $$
 begin

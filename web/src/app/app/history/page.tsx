@@ -9,7 +9,7 @@ import { useToast } from "@/components/Toast";
 import { isStaff } from "@/lib/auth/roles";
 import { courseLabel } from "@/lib/categories";
 import { readOrgMeta } from "@/lib/orgMeta";
-import { ReviewRow, statusLabel, verdictLabel } from "@/lib/reports";
+import { ReviewRow, displaySessionTitle, statusLabel, verdictLabel } from "@/lib/reports";
 import { createClient } from "@/lib/supabase/client";
 
 export default function HistoryPage() {
@@ -35,9 +35,13 @@ export default function HistoryPage() {
       }
       let { data, error } = await supabase
         .from("reviews")
-        .select("id,video_name,status,proposed_verdict,findings_count,created_at,cost,duration_ms,quality_score,category,report")
+        .select("id,video_name,session_title,status,proposed_verdict,findings_count,created_at,cost,duration_ms,quality_score,category,report")
         .order("created_at", { ascending: false });
-      if (error && String(error.message || "").includes("category")) {
+      if (
+        error &&
+        (String(error.message || "").includes("category") ||
+          String(error.message || "").includes("session_title"))
+      ) {
         const fallback = await supabase
           .from("reviews")
           .select("id,video_name,status,proposed_verdict,findings_count,created_at,cost,duration_ms,quality_score,report")
@@ -50,8 +54,7 @@ export default function HistoryPage() {
         setRows(
           ((data as ReviewRow[]) || []).map((r) => ({
             ...r,
-            category: readOrgMeta(r).category,
-            tags: readOrgMeta(r).tags,
+            ...readOrgMeta(r),
           }))
         );
       }
@@ -97,7 +100,7 @@ export default function HistoryPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>الفيديو</th>
+                  <th>عنوان السيشن</th>
                   <th>الكورس</th>
                   <th>التاريخ</th>
                   <th>الحالة</th>
@@ -110,7 +113,7 @@ export default function HistoryPage() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
-                    <td>{r.video_name || r.id}</td>
+                    <td>{displaySessionTitle(r)}</td>
                     <td>{courseLabel(r.category)}</td>
                     <td>{new Date(r.created_at).toLocaleString("ar")}</td>
                     <td>
