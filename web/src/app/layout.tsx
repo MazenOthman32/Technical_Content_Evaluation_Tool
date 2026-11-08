@@ -1,11 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Sans_Arabic } from "next/font/google";
+import { IBM_Plex_Sans_Arabic, Plus_Jakarta_Sans } from "next/font/google";
 import { ToastProvider } from "@/components/Toast";
 import "./globals.css";
 
-const font = IBM_Plex_Sans_Arabic({
-  subsets: ["arabic", "latin"],
+const arabic = IBM_Plex_Sans_Arabic({
+  subsets: ["arabic"],
   weight: ["400", "500", "600", "700"],
+  variable: "--font-ar",
+});
+
+const ui = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-ui",
 });
 
 export const metadata: Metadata = {
@@ -23,7 +30,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
-      <body className={font.className}>
+      <body className={`${arabic.variable} ${ui.variable}`}>
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>

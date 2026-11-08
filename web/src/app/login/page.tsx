@@ -37,7 +37,7 @@ export default function LoginPage() {
     <div className="login-page">
       <div className="login-wrap">
         <section className="login-hero">
-          <Logo />
+          <Logo tone="light" />
           <h1>Technical Content Evaluation</h1>
           <p>منصة مؤسسية لمراجعة جودة المحتوى التقني بذكاء اصطناعي — لفريق Instant Plus.</p>
         </section>
