@@ -1,12 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
 import { MODELS } from "@/lib/models";
 import { createClient } from "@/lib/supabase/client";
 
 export default function ReviewPage() {
   const toast = useToast();
+  const router = useRouter();
   const [source, setSource] = useState<"drive" | "file">("drive");
   const [driveUrl, setDriveUrl] = useState("");
   const [provider, setProvider] = useState("groq");
@@ -77,10 +79,11 @@ export default function ReviewPage() {
 
       const started = Date.now();
       const reviewId = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+      const videoName = source === "file" ? file?.name || "video" : url;
       const { error: insertErr } = await supabase.from("reviews").insert({
         id: reviewId,
         user_id: auth.user.id,
-        video_name: source === "file" ? file?.name : url,
+        video_name: videoName,
         drive_url: source === "drive" ? url : null,
         provider,
         model,
@@ -93,6 +96,7 @@ export default function ReviewPage() {
         const body = new FormData();
         body.set("provider", provider);
         body.set("model", model);
+        body.set("review_id", reviewId);
         body.set("drive_url", source === "drive" ? url : "");
         if (source === "file" && file) body.set("video", file);
         const session = await supabase.auth.getSession();
@@ -103,18 +107,20 @@ export default function ReviewPage() {
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
+          await supabase.from("reviews").update({ status: "failed" }).eq("id", reviewId);
           throw new Error(
             (typeof data.detail === "string" && data.detail) ||
               data.error ||
               "فشل إرسال المهمة للمعالج"
           );
         }
-        toast.push("تم إرسال المراجعة للمعالجة", "ok");
+        toast.push("تم إرسال المراجعة للمعالجة — هتفتح صفحة التقرير", "ok");
       } else {
-        toast.push("تم حفظ المراجعة في السجل. شغّل معالج الفيديو لإكمال التحليل", "ok");
+        toast.push("تم حفظ الطلب. افتح التقرير لمتابعة الحالة بعد تشغيل المعالج", "ok");
       }
       form?.reset?.();
       clearForm();
+      router.push(`/app/reports/${encodeURIComponent(reviewId)}`);
     } catch (ex: unknown) {
       toast.push(ex instanceof Error ? ex.message : "حدث خطأ", "error");
     } finally {

@@ -56,6 +56,16 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         user = get_session_user(request.cookies.get(COOKIE_NAME))
+        if not user:
+            auth = request.headers.get("Authorization") or ""
+            if auth.lower().startswith("bearer "):
+                token = auth.split(" ", 1)[1].strip()
+                try:
+                    from .supabase_client import verify_access_token
+
+                    user = verify_access_token(token)
+                except Exception:
+                    user = None
         if user:
             request.state.user = user
             return await call_next(request)
@@ -90,7 +100,21 @@ class SettingsUpdate(BaseModel):
 
 
 def _current_user(request: Request) -> Optional[dict[str, Any]]:
-    return get_session_user(request.cookies.get(COOKIE_NAME))
+    cookie_user = get_session_user(request.cookies.get(COOKIE_NAME))
+    if cookie_user:
+        return cookie_user
+    auth = request.headers.get("Authorization") or ""
+    if auth.lower().startswith("bearer "):
+        token = auth.split(" ", 1)[1].strip()
+        try:
+            from .supabase_client import verify_access_token
+
+            sb_user = verify_access_token(token)
+            if sb_user:
+                return sb_user
+        except Exception:
+            return None
+    return None
 
 
 def require_user(request: Request) -> dict[str, Any]:
@@ -102,13 +126,40 @@ def require_user(request: Request) -> dict[str, Any]:
 
 def require_admin(request: Request) -> dict[str, Any]:
     user = require_user(request)
-    if user.get("role") != "admin":
+    if user.get("role") not in {"admin", "super_admin"}:
         raise HTTPException(403, "متاح للمسؤول فقط")
     return user
 
 
-def _config_for_user(username: str) -> SystemConfig:
-    prefs = get_user_settings(username)
+def _prefs_for_user(user: dict[str, Any]) -> dict[str, Any]:
+    if user.get("id"):
+        try:
+            from .supabase_client import get_settings_for_user
+
+            return get_settings_for_user(str(user["id"]))
+        except Exception:
+            pass
+    return get_user_settings(user.get("username") or "")
+
+
+def _api_key_for_user(user: dict[str, Any], provider: str) -> Optional[str]:
+    if user.get("id"):
+        try:
+            from .supabase_client import get_user_api_key_sb
+
+            key = get_user_api_key_sb(str(user["id"]), provider)
+            if key:
+                return key
+        except Exception:
+            pass
+    return get_user_api_key(user.get("username") or "", provider)
+
+
+def _config_for_user(user: dict[str, Any] | str) -> SystemConfig:
+    if isinstance(user, str):
+        prefs = get_user_settings(user)
+    else:
+        prefs = _prefs_for_user(user)
     return _base_config.model_copy(
         update={
             "llm_provider": prefs.get("llm_provider") or _base_config.llm_provider,
@@ -421,11 +472,12 @@ async def create_review(
     title: str = Form(""),
     provider: str = Form(""),
     model: str = Form(""),
+    review_id: str = Form(""),
     user: dict = Depends(require_user),
 ):
-    prefs = get_user_settings(user["username"])
+    prefs = _prefs_for_user(user)
     provider = (provider or prefs.get("llm_provider") or "groq").lower().strip()
-    if provider not in {"anthropic", "groq"}:
+    if provider not in {"anthropic", "groq", "openai"}:
         raise HTTPException(400, "مزود غير مدعوم")
 
     drive_url = (drive_url or "").strip()
@@ -435,12 +487,13 @@ async def create_review(
     if has_file and drive_url:
         raise HTTPException(400, "اختَر إما ملف أو لينك Drive")
 
-    key = get_user_api_key(user["username"], provider)
+    key = _api_key_for_user(user, provider)
     if not key:
         raise HTTPException(400, "مفتاح API غير مضبوط لحسابك. افتح الإعدادات وأضفه.")
 
-    review_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
-    cfg = _config_for_user(user["username"])
+    safe_id = "".join(ch for ch in (review_id or "").strip() if ch.isalnum() or ch in {"_", "-"})
+    review_id = safe_id or (datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6])
+    cfg = _config_for_user(user)
     root = default_data_dir(cfg) / review_id
     src_dir = root / "source"
     src_dir.mkdir(parents=True, exist_ok=True)
@@ -463,8 +516,9 @@ async def create_review(
         glossary=[g.strip() for g in glossary.split(",") if g.strip()],
         title=title or None,
     )
-    chosen_model = (model or "").strip() or prefs.get("llm_model") or DEFAULT_MODELS[provider]
+    chosen_model = (model or "").strip() or prefs.get("llm_model") or DEFAULT_MODELS.get(provider) or DEFAULT_MODELS["groq"]
     cfg = cfg.model_copy(update={"llm_provider": provider, "llm_model": chosen_model})
+    video_name = dest.name if dest else (drive_url or "drive")
 
     with _jobs_lock:
         _jobs[review_id] = {
@@ -475,6 +529,7 @@ async def create_review(
             "provider": provider,
             "model": chosen_model,
             "created_by": user.get("username"),
+            "user_id": user.get("id"),
         }
 
     # persist owner early
@@ -483,14 +538,81 @@ async def create_review(
             {
                 "review_id": review_id,
                 "created_by": user.get("username"),
+                "user_id": user.get("id"),
                 "processing_status": "queued",
-                "video_name": dest.name if dest else "drive",
+                "video_name": video_name,
+                "drive_url": drive_url or None,
             },
             ensure_ascii=False,
             indent=2,
         ),
         encoding="utf-8",
     )
+
+    def _sync_supabase(status: str, pipe: Optional[Pipeline] = None, error: Optional[str] = None) -> None:
+        try:
+            from .supabase_client import upsert_review_result
+
+            report = {}
+            report_path = root / "report.json"
+            md_path = root / "report.md"
+            if report_path.exists():
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+                if md_path.exists():
+                    report["markdown"] = md_path.read_text(encoding="utf-8")
+            elif error:
+                report = {
+                    "processing_status": "failed",
+                    "proposed_verdict": "needs_human_review",
+                    "findings": [],
+                    "limitations": [f"فشل المعالجة: {error}"],
+                }
+
+            findings = report.get("findings") or []
+            verdict = None
+            if pipe is not None:
+                verdict = pipe.verdict.value
+                findings_count = len(pipe.findings)
+            else:
+                verdict = report.get("proposed_verdict")
+                findings_count = len(findings)
+
+            critical = sum(1 for f in findings if (f.get("severity") if isinstance(f, dict) else getattr(f, "severity", None)) == "critical")
+            medium = sum(1 for f in findings if (f.get("severity") if isinstance(f, dict) else getattr(f, "severity", None)) == "medium")
+            quality = None
+            if findings:
+                quality = max(0, round(100 - critical * 25 - medium * 10, 1))
+            elif status == "completed":
+                quality = 100.0
+
+            cost_usd = None
+            if isinstance(report.get("cost"), dict):
+                cost_usd = report["cost"].get("estimated_usd")
+
+            duration_ms = None
+            if report.get("duration_sec") is not None:
+                try:
+                    duration_ms = int(float(report["duration_sec"]) * 1000)
+                except Exception:
+                    duration_ms = None
+
+            upsert_review_result(
+                review_id=review_id,
+                user_id=user.get("id"),
+                video_name=video_name,
+                drive_url=drive_url or None,
+                provider=provider,
+                model=chosen_model,
+                status=status,
+                proposed_verdict=verdict,
+                findings_count=findings_count,
+                quality_score=quality,
+                duration_ms=duration_ms,
+                cost=cost_usd,
+                report=report,
+            )
+        except Exception:
+            return
 
     def runner() -> None:
         def on_progress(stage: str, status: str, error: Optional[str] = None) -> None:
@@ -527,6 +649,7 @@ async def create_review(
                 meta_path = root / "meta.json"
                 meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
                 meta["created_by"] = user.get("username")
+                meta["user_id"] = user.get("id")
                 meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
             pipe._persist_meta = persist_with_owner  # type: ignore[method-assign]
@@ -535,10 +658,12 @@ async def create_review(
                 _jobs[review_id]["status"] = "completed"
                 _jobs[review_id]["verdict"] = pipe.verdict.value
                 _jobs[review_id]["findings_count"] = len(pipe.findings)
+            _sync_supabase("completed", pipe=pipe)
         except Exception as e:
             with _jobs_lock:
                 _jobs[review_id]["status"] = "failed"
                 _jobs[review_id]["error"] = str(e)
+            _sync_supabase("failed", error=str(e))
 
     threading.Thread(target=runner, daemon=True).start()
     return {"review_id": review_id, "status": "queued", "provider": provider, "model": chosen_model}

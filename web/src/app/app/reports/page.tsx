@@ -1,20 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import Skeleton from "@/components/Skeleton";
+import { ReviewRow, hasReportContent, statusLabel, verdictLabel } from "@/lib/reports";
 import { createClient } from "@/lib/supabase/client";
 
-type Review = {
-  id: string;
-  video_name: string | null;
-  status: string;
-  proposed_verdict: string | null;
-  created_at: string;
-  report: unknown;
-};
-
 export default function ReportsPage() {
-  const [rows, setRows] = useState<Review[]>([]);
+  const [rows, setRows] = useState<ReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,60 +15,51 @@ export default function ReportsPage() {
       const supabase = createClient();
       const { data } = await supabase
         .from("reviews")
-        .select("id,video_name,status,proposed_verdict,created_at,report")
+        .select(
+          "id,video_name,status,proposed_verdict,findings_count,quality_score,created_at,report,provider,model"
+        )
         .order("created_at", { ascending: false });
-      setRows((data as Review[]) || []);
+      setRows((data as ReviewRow[]) || []);
       setLoading(false);
     })();
   }, []);
-
-  function downloadJson(r: Review) {
-    const blob = new Blob([JSON.stringify(r.report || r, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${r.id}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
 
   return (
     <div className="page-fill">
       <div className="page-head">
         <div>
           <h1 className="page-title">التقارير</h1>
-          <p className="page-sub">تنزيل مخرجات التقييم بصيغة JSON</p>
+          <p className="page-sub">افتح أي تقييم وراجع الملاحظات والحكم المقترح بالكامل</p>
         </div>
       </div>
-      <div className="panel settings-panel" style={{ display: "grid", gap: "0.75rem", alignContent: "start" }}>
+      <div className="panel settings-panel reports-list">
         {loading ? <Skeleton rows={4} /> : null}
-        {!loading && !rows.length ? <p className="help">لا توجد تقارير بعد.</p> : null}
-        {rows.map((r) => (
-          <div
-            key={r.id}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: "1rem",
-              flexWrap: "wrap",
-              alignItems: "center",
-              border: "1px solid var(--line)",
-              borderRadius: 14,
-              padding: "0.9rem",
-              background: "color-mix(in srgb, var(--panel-solid) 70%, transparent)",
-            }}
-          >
-            <div>
-              <strong>{r.video_name || r.id}</strong>
-              <div className="help">
-                {new Date(r.created_at).toLocaleString("ar")} · {r.status} · {r.proposed_verdict || "—"}
+        {!loading && !rows.length ? <p className="help">لا توجد تقارير بعد. ابدأ من «مراجعة جديدة».</p> : null}
+        {rows.map((r) => {
+          const ready = hasReportContent(r.report);
+          return (
+            <div key={r.id} className="report-row">
+              <div className="report-row-main">
+                <strong className="report-row-title">{r.video_name || r.id}</strong>
+                <div className="help">
+                  {new Date(r.created_at).toLocaleString("ar")} · {statusLabel(r.status)} ·{" "}
+                  {verdictLabel(r.proposed_verdict || r.report?.proposed_verdict)} ·{" "}
+                  {r.findings_count ?? r.report?.findings?.length ?? 0} ملاحظة
+                </div>
+                {!ready ? (
+                  <div className="help" style={{ color: "var(--warn)", marginTop: 4 }}>
+                    لسه مفيش نتائج تحليل — التقرير مش جاهز للمراجعة
+                  </div>
+                ) : null}
+              </div>
+              <div className="row-actions">
+                <Link className={`btn ${ready ? "" : "secondary"} btn-sm`} href={`/app/reports/${encodeURIComponent(r.id)}`}>
+                  {ready ? "فتح التقرير" : "عرض الحالة"}
+                </Link>
               </div>
             </div>
-            <button className="btn secondary" type="button" onClick={() => downloadJson(r)}>
-              تنزيل JSON
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -97,3 +97,57 @@ def get_user_api_key_sb(user_id: str, provider: str) -> Optional[str]:
     key_name = "anthropic_api_key" if provider == "anthropic" else "groq_api_key"
     key = (settings.get(key_name) or "").strip()
     return key or None
+
+
+def upsert_review_result(
+    *,
+    review_id: str,
+    user_id: Optional[str],
+    video_name: Optional[str],
+    drive_url: Optional[str],
+    provider: Optional[str],
+    model: Optional[str],
+    status: str,
+    proposed_verdict: Optional[str],
+    findings_count: int,
+    quality_score: Optional[float],
+    duration_ms: Optional[int],
+    cost: Optional[float],
+    report: Optional[dict[str, Any]],
+) -> None:
+    """Persist finished pipeline output into public.reviews for the Next.js app."""
+    if not supabase_enabled() or not review_id:
+        return
+    try:
+        client = get_supabase()
+        payload: dict[str, Any] = {
+            "id": review_id,
+            "status": status,
+            "proposed_verdict": proposed_verdict,
+            "findings_count": findings_count,
+            "quality_score": quality_score,
+            "duration_ms": duration_ms,
+            "cost": cost,
+            "report": report,
+            "updated_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        }
+        if user_id:
+            payload["user_id"] = user_id
+        if video_name is not None:
+            payload["video_name"] = video_name
+        if drive_url is not None:
+            payload["drive_url"] = drive_url
+        if provider is not None:
+            payload["provider"] = provider
+        if model is not None:
+            payload["model"] = model
+
+        # Prefer update when row already exists (created by Next.js).
+        existing = client.table("reviews").select("id").eq("id", review_id).limit(1).execute()
+        if existing.data:
+            client.table("reviews").update(payload).eq("id", review_id).execute()
+        elif user_id:
+            client.table("reviews").upsert(payload).execute()
+    except Exception:
+        # Never break the local pipeline if cloud sync fails.
+        return

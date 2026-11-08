@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import Skeleton from "@/components/Skeleton";
+import { statusLabel, verdictLabel } from "@/lib/reports";
 import { createClient } from "@/lib/supabase/client";
 
 type Review = {
@@ -39,7 +41,7 @@ export default function HistoryPage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">السجل</h1>
-          <p className="page-sub">كل التقييمات المرتبطة بصلاحياتك</p>
+          <p className="page-sub">كل التقييمات — اضغط لفتح التقرير الكامل</p>
         </div>
       </div>
       <div className="panel settings-panel">
@@ -57,6 +59,7 @@ export default function HistoryPage() {
                   <th>الحكم</th>
                   <th>الجودة</th>
                   <th>الزمن</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -65,11 +68,16 @@ export default function HistoryPage() {
                     <td>{r.video_name || r.id}</td>
                     <td>{new Date(r.created_at).toLocaleString("ar")}</td>
                     <td>
-                      <span className="pill">{r.status}</span>
+                      <span className="pill">{statusLabel(r.status)}</span>
                     </td>
-                    <td>{r.proposed_verdict || "—"}</td>
+                    <td>{verdictLabel(r.proposed_verdict)}</td>
                     <td>{r.quality_score ?? "—"}</td>
                     <td>{r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}ث` : "—"}</td>
+                    <td>
+                      <Link className="btn secondary btn-sm" href={`/app/reports/${encodeURIComponent(r.id)}`}>
+                        فتح
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>
