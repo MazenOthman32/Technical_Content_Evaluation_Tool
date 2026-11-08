@@ -132,10 +132,10 @@ class LLMClient:
                                 }
                             )
                     content.append({"type": "text", "text": user})
+                    # Anthropic SDK >=2.5 removed temperature from messages.create().
                     resp = self.client.messages.create(
                         model=self.model,
                         max_tokens=max_tokens,
-                        temperature=self.temperature,
                         system=system,
                         messages=[{"role": "user", "content": content}],
                     )
