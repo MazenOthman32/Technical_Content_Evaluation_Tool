@@ -1,116 +1,216 @@
-# Instant Plus Video Reviewer
+# Instant+ Technical Content Evaluation Tool
 
-أداة ضمان جودة تقنية بمساعدة الذكاء الاصطناعي لمراجعة فيديوهات المحتوى التعليمي قبل النشر على Instant Plus.
+أداة مؤسسية لتقييم جودة المحتوى التقني (فيديوهات تعليمية) بمساعدة الذكاء الاصطناعي، مع واجهة عربية، تقارير PDF، وتصنيف حسب الكورس.
 
-**المبدأ:** مراجعة مساعدة بالذكاء الاصطناعي، واعتماد بشري نهائي. التقرير النظيف لا يعني أن المحتوى صحيح 100%.
+المبدأ الأساسي: **الذكاء الاصطناعي يساعد — والقرار النهائي بشري.**
 
-## المتطلبات
+---
 
-- Python 3.11+
-- FFmpeg و FFprobe
-- Tesseract OCR مع حزم اللغات `ara` و `eng`
-- مفتاح Anthropic API
+## ماذا ستشغّل؟
 
-### Windows (مثال)
+| الجزء | الوظيفة | المنفذ |
+|---|---|---|
+| `web/` (Next.js) | واجهة الدخول، التقارير، الإعدادات، PDF | `3000` |
+| `video_reviewer` (FastAPI) | معالج الفيديو (تفريغ + OCR + LLM) | `8765` |
+| Supabase | Auth + قاعدة البيانات + RLS | Cloud |
+
+---
+
+## المتطلبات مرة واحدة
+
+- **Node.js 20+**
+- **Python 3.11+**
+- **FFmpeg** و **Tesseract OCR** (`ara` + `eng`)
+- مشروع **Supabase** + مفاتيح LLM (Groq / Anthropic / OpenAI)
+
+### Windows
 
 ```powershell
+winget install OpenJS.NodeJS.LTS
+winget install Python.Python.3.12
 winget install ffmpeg
 winget install UB-Mannheim.TesseractOCR
 ```
 
-تأكد أن مسارات FFmpeg و Tesseract في `PATH`.
+تأكد أن `ffmpeg` و `tesseract` ظاهرين في `PATH`.
 
-## التثبيت
+---
 
-```powershell
-cd "c:\Users\omaze\OneDrive\Desktop\Final Evaluation Tool"
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-pip install -e .
-copy .env.example .env
-# ضع ANTHROPIC_API_KEY في .env
-```
+## إعداد سريع (موصى به)
 
-## الاستخدام
-
-### CLI — مراجعة فيديو
+من جذر المشروع:
 
 ```powershell
-video-reviewer review .\lesson.mp4 --course course.example.yaml --config config.example.yaml --max-cost 4
+cd "C:\path\to\Final Evaluation Tool"
+.\scripts\setup.ps1
 ```
 
-### CLI — الواجهة المحلية
+السكربت يعمل الآتي:
+1. ينشئ `.venv` ويثبّت باقة Python
+2. ينسخ `.env` و `web/.env.local` من الأمثلة إن لم تكونا موجودتين
+3. يشغّل `npm install` داخل `web/`
 
-```powershell
-video-reviewer ui
-```
+بعدها افتح الملفات واملأ القيم الحقيقية (بدون مشاركة المفاتيح علناً):
 
-ثم افتح: http://127.0.0.1:8765
+- `.env`
+- `web/.env.local`
 
-### واجهة Enterprise (Next.js)
+### قاعدة البيانات (Supabase SQL Editor)
+
+نفّذ بالترتيب:
+
+1. محتوى `supabase/schema.sql`
+2. محتوى `supabase/migrations/20261108_reviews_categories_delete.sql`
+
+### إنشاء حسابات البداية
 
 ```powershell
 cd web
-copy .env.local.example .env.local
+node scripts/seed-admins.mjs
+```
+
+أو من الجذر:
+
+```powershell
+node scripts/seed-super-admin.mjs
+```
+
+---
+
+## تشغيل كل شيء محلياً بأمر واحد
+
+```powershell
+.\scripts\dev.ps1
+```
+
+يفتح:
+- معالج الفيديو على `http://127.0.0.1:8765`
+- الواجهة على `http://127.0.0.1:3000`
+
+سجّل الدخول بالحساب الذي أنشأته عبر الـ seed.
+
+---
+
+## تشغيل يدوي (نافذتان)
+
+### 1) المعالج
+
+```powershell
+.\scripts\start-processor.ps1
+```
+
+### 2) الواجهة
+
+```powershell
+cd web
 npm install
 npm run dev
 ```
 
-بعد تنفيذ `supabase/schema.sql` و`node scripts/seed-super-admin.mjs`:
+افتح: [http://127.0.0.1:3000](http://127.0.0.1:3000)
 
-| الحساب | الدخول | الدور |
-|---|---|---|
-| Super Admin | `MazenOthman320@gmail.com` + `SUPER_ADMIN_PASSWORD` | إدارة كاملة + مفاتيح افتراضية |
-| Admin / Reviewer | يُنشأ من الإعدادات → إدارة المستخدمين | حسب الدور |
+---
 
-محليًا (FastAPI UI) ما زال متاحًا عبر `video-reviewer ui` مع `admin/admin123` و`reviewer/reviewer123`.
-
-### CLI — تقييم Golden Dataset
+## أوامر مفيدة يومياً
 
 ```powershell
-video-reviewer eval --golden golden/ --out results/
-```
+# إعداد أول مرة
+.\scripts\setup.ps1
 
-### الاختبارات
+# تشغيل كامل محلي
+.\scripts\dev.ps1
 
-```powershell
+# تشغيل المعالج فقط
+.\scripts\start-processor.ps1
+
+# نفق عام للمعالج (لو الواجهة على Vercel)
+.\scripts\start-tunnel.ps1
+
+# اختبارات Python
+.\.venv\Scripts\Activate.ps1
 pytest -q
+
+# فحص TypeScript للواجهة
+cd web
+npx tsc --noEmit
+
+# بناء إنتاج للواجهة
+cd web
+npm run build
 ```
 
-## مخرجات المراجعة
+---
 
-لكل مراجعة في `data/reviews/<review_id>/`:
+## الميزات الأساسية في الواجهة
 
-| الملف | المحتوى |
+- تسجيل دخول عبر Supabase Auth
+- أدوار: `super_admin` / `admin` / `reviewer`
+- مراجعة فيديو من Drive أو ملف محلي
+- تصنيف التقارير حسب **الكورس** + وسوم/وحدات
+- فتح تقرير كامل مع فلترة الملاحظات
+- تنزيل **PDF عربي** لتقرير واحد أو **عدة تقارير دفعة واحدة (ZIP)**
+- حذف التقارير لـ `admin` و `super_admin`
+- لوحة تحليل + إدارة مفاتيح ونماذج
+
+تم إزالة تنزيلات JSON / Markdown من الواجهة — التصدير الرسمي هو PDF فقط.
+
+---
+
+## الشعار
+
+ضع شعار Instant+ هنا:
+
+```text
+web/public/brand/instant-plus-logo.png
+```
+
+نسخة للمعالج المحلي (اختياري):
+
+```text
+video_reviewer/static/brand/instant-plus-logo.png
+```
+
+يفضّل PNG بخلفية بيضاء/شفافة ونسبة عرض تقريبية `2.4:1`.
+
+---
+
+## النشر على Vercel
+
+1. Root Directory = `web`
+2. أضف Environment Variables من `web/.env.local.example`
+3. اضبط `PROCESS_API_URL` على رابط عام للمعالج (مثلاً عبر `.\scripts\start-tunnel.ps1`)
+4. Deploy
+
+بدون معالج شغّال، الطلبات تُحفظ لكن التحليل الكامل لن يكتمل.
+
+---
+
+## هيكل مختصر
+
+```text
+Final Evaluation Tool/
+├─ web/                 # Next.js UI + APIs
+├─ video_reviewer/      # معالج الفيديو (Python)
+├─ supabase/            # schema + migrations
+├─ scripts/             # setup / dev / processor / tunnel / seed
+├─ .env.example
+└─ README.md
+```
+
+---
+
+## استكشاف أعطال سريع
+
+| العرض | الحل |
 |---|---|
-| `report.md` | تقرير عربي منسّق |
-| `report.json` | التقرير الكامل وفق المخطط |
-| `dropped_issues.json` | ملاحظات أُسقطت لعدم تحقق الأدلة |
-| `transcript.json` / `frames/` / `ocr.json` | قطع وسيطة قابلة للاستئناف |
-| `meta.json` | حالة المعالجة والبيانات الوصفية |
+| فشل الدخول | تأكد من `NEXT_PUBLIC_SUPABASE_*` ووجود المستخدم في Auth |
+| التقرير يظل queued | شغّل `.\scripts\start-processor.ps1` وتأكد من `PROCESS_API_URL` |
+| عمود category مفقود | نفّذ migration التصنيفات في Supabase |
+| PDF عربي مكسور | افتح التقرير من المتصفح بعد تحميل الصفحة (الخطوط تُحمَّل من الواجهة) |
+| لا يظهر اللوجو | تأكد من وجود `web/public/brand/instant-plus-logo.png` |
 
-## مسار المعالجة
+---
 
-1. استخراج الصوت  
-2. التفريغ (faster-whisper)  
-3. استخراج الإطارات  
-4. OCR  
-5. تقسيم الدروس  
-6. المراجعة التقنية  
-7. تحقق الأدلة (rapidfuzz)  
-8. حكم حتمي  
-9. توليد التقارير  
+## ملاحظة أمنية
 
-## ملاحظات Phase 1
-
-- لا يوجد اعتماد/رفض تلقائي للنشر.
-- لا يوجد قبول/رفض بشري دائم للملاحظات الفردية بعد.
-- Google Drive من الأداة القديمة خارج النطاق.
-- الملف [`session_reviewer.py`](session_reviewer.py) مرجع legacy مؤقت.
-
-## الهوية البصرية
-
-الشعار الرسمي Instant+ موجود في:
-
-`video_reviewer/static/brand/instant-plus-logo.png`
+لا ترفع ملفات `.env` أو `.env.local` إلى Git. استخدم الأمثلة فقط، وضع المفاتيح الحقيقية محلياً أو في Vercel Environment Variables.

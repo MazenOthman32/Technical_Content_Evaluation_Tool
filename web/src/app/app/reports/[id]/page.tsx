@@ -274,7 +274,7 @@ export default function ReportDetailPage() {
             >
               {COURSE_CATALOG.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.label}
+                  {c.labelAr}
                 </option>
               ))}
             </select>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
+import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { COURSE_CATALOG, courseLabel } from "@/lib/categories";
@@ -154,7 +155,7 @@ export default function ReportsPage() {
             <option value="all">كل الكورسات</option>
             {COURSE_CATALOG.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.label}
+                {c.labelAr}
               </option>
             ))}
           </select>
@@ -174,7 +175,9 @@ export default function ReportsPage() {
 
       <div className="panel settings-panel reports-list">
         {loading ? <Skeleton rows={4} /> : null}
-        {!loading && !filtered.length ? <p className="help">لا توجد تقارير مطابقة.</p> : null}
+        {!loading && !filtered.length ? (
+          <EmptyState title="لا توجد تقارير مطابقة" hint="جرّب تغيير الفلتر أو ابدأ مراجعة جديدة." />
+        ) : null}
 
         {grouped.map(([cat, items]) => (
           <section key={cat} className="report-group">

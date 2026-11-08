@@ -14,6 +14,7 @@ export default function Logo({ compact = false, tone = "light" }: LogoProps) {
           width={990}
           height={412}
           decoding="async"
+          draggable={false}
         />
       </div>
       {!compact ? <span className="brand-sub">Evaluation</span> : null}

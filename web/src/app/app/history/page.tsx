@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
+import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { isStaff } from "@/lib/auth/roles";
@@ -88,7 +89,9 @@ export default function HistoryPage() {
       <div className="panel settings-panel">
         {loading ? <Skeleton rows={5} /> : null}
         {err ? <div className="banner error">{err}</div> : null}
-        {!loading && !rows.length && !err ? <p className="help">لا توجد مراجعات بعد.</p> : null}
+        {!loading && !rows.length && !err ? (
+          <EmptyState title="لا توجد مراجعات بعد" hint="ابدأ مراجعة جديدة من صفحة المراجعة." />
+        ) : null}
         {rows.length ? (
           <div className="table-scroll">
             <table className="table">

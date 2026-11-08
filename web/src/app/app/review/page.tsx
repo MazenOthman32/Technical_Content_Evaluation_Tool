@@ -155,11 +155,11 @@ export default function ReviewPage() {
       <form className="panel form review-form settings-panel" onSubmit={onSubmit}>
         {processorReady === false ? (
           <div className="banner warn">
-            معالج الفيديو غير متصل الآن. الطلبات هتتسجل، والتحليل الكامل هيشتغل بعد تشغيل المعالج.
+            معالج الفيديو غير متصل. سيتم حفظ الطلب، ويكتمل التحليل بعد تشغيل المعالج محلياً.
           </div>
         ) : null}
         {processorReady === true ? (
-          <div className="banner ok">معالج الفيديو متصل — التقارير الكاملة هتتولد بعد انتهاء التحليل.</div>
+          <div className="banner ok">المعالج متصل — سيُنشأ التقرير الكامل بعد انتهاء التحليل.</div>
         ) : null}
         <div className="tabs">
           <button type="button" className={source === "drive" ? "active" : ""} onClick={() => setSource("drive")}>
@@ -221,7 +221,7 @@ export default function ReviewPage() {
             <select value={category} onChange={(e) => setCategory(e.target.value)}>
               {COURSE_CATALOG.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.label}
+                  {c.labelAr}
                 </option>
               ))}
             </select>
