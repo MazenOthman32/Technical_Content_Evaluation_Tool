@@ -1,8 +1,6 @@
-# Moved
+# Instant Plus Video Reviewer (Next.js)
 
-واجهة Next.js انتقلت لجذر الريبو لإصلاح نشر Vercel (Root Directory = `.`).
-
-شغّل من الجذر:
+Root Directory on Vercel must be `web`.
 
 ```powershell
 npm install

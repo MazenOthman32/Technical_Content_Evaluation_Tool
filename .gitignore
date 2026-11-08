@@ -1,12 +1,9 @@
 .env
-.env.local
-.env*.local
+web/.env.local
+web/node_modules/
+web/.next/
 node_modules/
 .next/
-out/
-.vercel
-*.tsbuildinfo
-next-env.d.ts
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -21,9 +18,4 @@ data/users.json
 results/
 *.wav
 .DS_Store
-web/node_modules/
-web/.next/
-
-# leftover web/ folder (app lives at repo root)
-web/**
-!web/README.md
+.vercel
