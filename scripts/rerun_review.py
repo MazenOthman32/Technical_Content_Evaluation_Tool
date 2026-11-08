@@ -38,7 +38,15 @@ def main() -> int:
 
     api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise SystemExit("Missing LLM API key in env")
+        try:
+            from video_reviewer.supabase_client import get_user_api_key_sb
+
+            uid = meta.get("user_id") or "c75722c3-5d2e-4b21-8539-8e247080735d"
+            api_key = get_user_api_key_sb(str(uid), "anthropic") or get_user_api_key_sb(str(uid), "groq")
+        except Exception:
+            api_key = None
+    if not api_key:
+        raise SystemExit("Missing LLM API key in env/user_settings")
 
     model = (meta.get("config") or {}).get("llm_model") or os.getenv("REVIEW_MODEL") or "claude-sonnet-5-5"
     provider = (meta.get("config") or {}).get("llm_provider") or "anthropic"
