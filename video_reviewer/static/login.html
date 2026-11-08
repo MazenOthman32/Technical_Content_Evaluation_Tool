@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>دخول — Instant Plus Video Reviewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/login.css" />
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-ambient" aria-hidden="true"></div>
+    <div class="login-grid">
+      <section class="login-hero">
+        <img src="/static/brand/instant-plus-logo.png" alt="Instant+" class="hero-logo" />
+        <h1>Video Reviewer</h1>
+        <p>منصة مراجعة المحتوى التقني لفريق Instant Plus</p>
+      </section>
+
+      <section class="login-panel">
+        <form id="login-form" class="login-form" autocomplete="on">
+          <div class="form-head">
+            <h2>تسجيل الدخول</h2>
+            <p>الدخول متاح للحسابات المصرّح بها فقط</p>
+          </div>
+
+          <label>
+            <span>اسم المستخدم</span>
+            <input name="username" type="text" required autocomplete="username" placeholder="admin" />
+          </label>
+
+          <label>
+            <span>كلمة المرور</span>
+            <div class="password-wrap">
+              <input name="password" id="password" type="password" required autocomplete="current-password" placeholder="••••••••" />
+              <button type="button" class="toggle-pass" id="toggle-pass" aria-label="إظهار كلمة المرور">عرض</button>
+            </div>
+          </label>
+
+          <button class="login-btn" type="submit" id="login-btn">دخول</button>
+          <div id="login-error" class="login-error" hidden></div>
+        </form>
+      </section>
+    </div>
+  </div>
+  <script src="/static/js/login.js"></script>
+</body>
+</html>

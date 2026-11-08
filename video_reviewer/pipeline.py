@@ -141,6 +141,7 @@ class Pipeline:
         if self.llm is None:
             self.llm = LLMClient(
                 model=self.config.llm_model,
+                provider=getattr(self.config, "llm_provider", "anthropic"),
                 temperature=self.config.temperature,
                 max_cost=self.config.max_cost,
                 api_key=self.api_key,

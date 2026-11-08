@@ -5,7 +5,8 @@ frame_sample_interval: 20
 pre_change_offset: 0.4
 ocr_engine: pytesseract
 ocr_high_confidence: 70
-llm_model: claude-sonnet-5-5
+llm_provider: groq
+llm_model: openai/gpt-oss-120b
 temperature: 0
 evidence_similarity: 85
 segmentation_overlap: 60

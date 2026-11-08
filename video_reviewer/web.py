@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import threading
 import uuid
@@ -12,40 +11,117 @@ from pathlib import Path
 from typing import Any, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from .config import SystemConfig, default_data_dir, load_course_meta, load_system_config
+from .auth import (
+    authenticate,
+    cookie_secure,
+    create_session,
+    destroy_session,
+    ensure_users_file,
+    get_session_user,
+    get_user_api_key,
+    get_user_settings,
+    update_user_settings,
+)
+from .config import SystemConfig, default_data_dir
+from .drive import download_from_drive
+from .llm import AVAILABLE_MODELS, DEFAULT_MODELS
 from .pipeline import Pipeline
 from .schema import CourseMeta
-from .verdict import severity_counts
 
 load_dotenv()
+ensure_users_file()
 
 STATIC_DIR = Path(__file__).parent / "static"
-DATA_ROOT = Path.cwd() / "data" / "reviews"
-DATA_ROOT.mkdir(parents=True, exist_ok=True)
+Path("data/reviews").mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Instant Plus Video Reviewer", version="0.1.0")
+COOKIE_NAME = "ipvr_session"
+
+
+class AuthGateMiddleware(BaseHTTPMiddleware):
+    PUBLIC_EXACT = {"/", "/api/login", "/api/me", "/api/health", "/favicon.ico"}
+    PUBLIC_STATIC = {"/static/css/login.css", "/static/js/login.js", "/static/login.html"}
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        if path in self.PUBLIC_EXACT or path in self.PUBLIC_STATIC or path.startswith("/static/brand/"):
+            return await call_next(request)
+
+        user = get_session_user(request.cookies.get(COOKIE_NAME))
+        if user:
+            request.state.user = user
+            return await call_next(request)
+
+        if path.startswith("/api/"):
+            return JSONResponse({"detail": "يلزم تسجيل الدخول"}, status_code=401)
+        return RedirectResponse(url="/", status_code=302)
+
+
+app.add_middleware(AuthGateMiddleware)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# In-memory job registry (local Phase 1)
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
-_session_api_key: Optional[str] = None
-_session_config = SystemConfig()
+_base_config = SystemConfig()
+
+MEDIA_EXT = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}
+
+
+class LoginBody(BaseModel):
+    username: str
+    password: str
 
 
 class SettingsUpdate(BaseModel):
-    api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+    groq_api_key: Optional[str] = None
     max_cost: Optional[float] = None
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    whisper_model: Optional[str] = None
 
 
-def _list_reviews() -> list[dict[str, Any]]:
+def _current_user(request: Request) -> Optional[dict[str, Any]]:
+    return get_session_user(request.cookies.get(COOKIE_NAME))
+
+
+def require_user(request: Request) -> dict[str, Any]:
+    user = _current_user(request)
+    if not user:
+        raise HTTPException(401, "يلزم تسجيل الدخول")
+    return user
+
+
+def require_admin(request: Request) -> dict[str, Any]:
+    user = require_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(403, "متاح للمسؤول فقط")
+    return user
+
+
+def _config_for_user(username: str) -> SystemConfig:
+    prefs = get_user_settings(username)
+    return _base_config.model_copy(
+        update={
+            "llm_provider": prefs.get("llm_provider") or _base_config.llm_provider,
+            "llm_model": prefs.get("llm_model") or _base_config.llm_model,
+            "max_cost": prefs.get("max_cost"),
+            "whisper_model": prefs.get("whisper_model") or _base_config.whisper_model,
+        }
+    )
+
+
+def _list_reviews(username: Optional[str] = None, role: str = "reviewer") -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
-    root = default_data_dir(_session_config)
+    root = default_data_dir(_base_config)
     if not root.exists():
         return items
     for d in sorted(root.iterdir(), reverse=True):
@@ -56,6 +132,9 @@ def _list_reviews() -> list[dict[str, Any]]:
         meta: dict[str, Any] = {}
         if meta_path.exists():
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        owner = meta.get("created_by")
+        if role != "admin" and username and owner and owner != username:
+            continue
         findings_count = meta.get("findings_count")
         if findings_count is None and report_path.exists():
             findings_count = len(json.loads(report_path.read_text(encoding="utf-8")).get("findings") or [])
@@ -69,6 +148,7 @@ def _list_reviews() -> list[dict[str, Any]]:
                 "review_id": d.name,
                 "video_name": meta.get("video_name") or d.name,
                 "created_at": meta.get("created_at"),
+                "created_by": owner,
                 "field": (meta.get("course") or {}).get("field"),
                 "processing_status": meta.get("processing_status") or "unknown",
                 "proposed_verdict": meta.get("proposed_verdict"),
@@ -79,8 +159,8 @@ def _list_reviews() -> list[dict[str, Any]]:
     return items
 
 
-def _dashboard_stats() -> dict[str, Any]:
-    reviews = _list_reviews()
+def _dashboard_stats(user: dict[str, Any]) -> dict[str, Any]:
+    reviews = _list_reviews(user.get("username"), user.get("role") or "reviewer")
     completed = [r for r in reviews if r["processing_status"] == "completed"]
     needs_attention = [
         r
@@ -90,7 +170,7 @@ def _dashboard_stats() -> dict[str, Any]:
     ]
     severity = {"critical": 0, "medium": 0, "minor": 0, "unsure": 0}
     total_findings = 0
-    root = default_data_dir(_session_config)
+    root = default_data_dir(_base_config)
     for r in reviews:
         report = root / r["review_id"] / "report.json"
         if not report.exists():
@@ -99,7 +179,7 @@ def _dashboard_stats() -> dict[str, Any]:
         findings = data.get("findings") or []
         total_findings += len(findings)
         for f in findings:
-            sev = (f.get("severity") or "unsure")
+            sev = f.get("severity") or "unsure"
             if sev in severity:
                 severity[sev] += 1
     return {
@@ -112,10 +192,35 @@ def _dashboard_stats() -> dict[str, Any]:
     }
 
 
+def _settings_payload(username: str) -> dict[str, Any]:
+    prefs = get_user_settings(username)
+    return {
+        "anthropic_api_key_set": bool((prefs.get("anthropic_api_key") or "").strip() or get_user_api_key(username, "anthropic")),
+        "groq_api_key_set": bool((prefs.get("groq_api_key") or "").strip() or get_user_api_key(username, "groq")),
+        "has_personal_anthropic": bool((prefs.get("anthropic_api_key") or "").strip()),
+        "has_personal_groq": bool((prefs.get("groq_api_key") or "").strip()),
+        "max_cost": prefs.get("max_cost"),
+        "llm_provider": prefs.get("llm_provider") or "groq",
+        "llm_model": prefs.get("llm_model") or DEFAULT_MODELS["groq"],
+        "whisper_model": prefs.get("whisper_model") or "auto",
+        "providers": AVAILABLE_MODELS,
+        "defaults": DEFAULT_MODELS,
+        "can_edit": True,
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
-def index() -> HTMLResponse:
-    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    return HTMLResponse(html)
+def index(request: Request):
+    if _current_user(request):
+        return RedirectResponse(url="/app", status_code=302)
+    return HTMLResponse((STATIC_DIR / "login.html").read_text(encoding="utf-8"))
+
+
+@app.get("/app", response_class=HTMLResponse)
+def app_home(request: Request):
+    if not _current_user(request):
+        return RedirectResponse(url="/", status_code=302)
+    return HTMLResponse((STATIC_DIR / "app.html").read_text(encoding="utf-8"))
 
 
 @app.get("/api/health")
@@ -123,28 +228,81 @@ def health() -> dict:
     return {"ok": True, "version": "0.1.0"}
 
 
+@app.get("/api/me")
+def me(request: Request) -> dict:
+    user = _current_user(request)
+    if not user:
+        return {"authenticated": False}
+    return {"authenticated": True, "user": user}
+
+
+@app.post("/api/login")
+def login(body: LoginBody) -> JSONResponse:
+    user = authenticate(body.username, body.password)
+    if not user:
+        raise HTTPException(401, "بيانات الدخول غير صحيحة")
+    token = create_session(user)
+    resp = JSONResponse({"ok": True, "user": user})
+    resp.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=cookie_secure(),
+        max_age=60 * 60 * 12,
+        path="/",
+    )
+    return resp
+
+
+@app.post("/api/logout")
+def logout(request: Request) -> JSONResponse:
+    destroy_session(request.cookies.get(COOKIE_NAME))
+    resp = JSONResponse({"ok": True})
+    # Match set_cookie attributes so browsers actually clear the session.
+    resp.delete_cookie(key=COOKIE_NAME, path="/", samesite="lax", secure=cookie_secure())
+    resp.set_cookie(
+        key=COOKIE_NAME,
+        value="",
+        max_age=0,
+        expires=0,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=cookie_secure(),
+    )
+    return resp
+
+
+@app.get("/api/models")
+def models(_user: dict = Depends(require_user)) -> dict:
+    return {"providers": AVAILABLE_MODELS, "defaults": DEFAULT_MODELS}
+
+
 @app.get("/api/dashboard")
-def dashboard() -> dict:
-    return _dashboard_stats()
+def dashboard(user: dict = Depends(require_user)) -> dict:
+    return _dashboard_stats(user)
 
 
 @app.get("/api/reviews")
-def reviews() -> dict:
-    return {"reviews": _list_reviews()}
+def reviews(user: dict = Depends(require_user)) -> dict:
+    return {"reviews": _list_reviews(user.get("username"), user.get("role") or "reviewer")}
 
 
 @app.get("/api/reviews/{review_id}")
-def review_detail(review_id: str) -> dict:
-    root = default_data_dir(_session_config) / review_id
+def review_detail(review_id: str, user: dict = Depends(require_user)) -> dict:
+    root = default_data_dir(_base_config) / review_id
     if not root.exists():
         raise HTTPException(404, "المراجعة غير موجودة")
     meta = {}
     if (root / "meta.json").exists():
         meta = json.loads((root / "meta.json").read_text(encoding="utf-8"))
+    owner = meta.get("created_by")
+    if user.get("role") != "admin" and owner and owner != user.get("username"):
+        raise HTTPException(403, "غير مسموح")
     report = {}
     if (root / "report.json").exists():
         report = json.loads((root / "report.json").read_text(encoding="utf-8"))
-    job = None
     with _jobs_lock:
         job = _jobs.get(review_id)
     return {
@@ -161,19 +319,32 @@ def review_detail(review_id: str) -> dict:
 
 
 @app.get("/api/reviews/{review_id}/video")
-def review_video(review_id: str):
-    root = default_data_dir(_session_config) / review_id / "source"
-    if not root.exists():
+def review_video(review_id: str, user: dict = Depends(require_user)):
+    root = default_data_dir(_base_config) / review_id
+    meta = {}
+    if (root / "meta.json").exists():
+        meta = json.loads((root / "meta.json").read_text(encoding="utf-8"))
+    owner = meta.get("created_by")
+    if user.get("role") != "admin" and owner and owner != user.get("username"):
+        raise HTTPException(403, "غير مسموح")
+    src = root / "source"
+    if not src.exists():
         raise HTTPException(404, "لا يوجد فيديو")
-    files = list(root.glob("*"))
+    files = list(src.glob("*"))
     if not files:
         raise HTTPException(404, "لا يوجد فيديو")
     return FileResponse(files[0])
 
 
 @app.get("/api/reviews/{review_id}/download/{kind}")
-def download(review_id: str, kind: str):
-    root = default_data_dir(_session_config) / review_id
+def download(review_id: str, kind: str, user: dict = Depends(require_user)):
+    root = default_data_dir(_base_config) / review_id
+    meta = {}
+    if (root / "meta.json").exists():
+        meta = json.loads((root / "meta.json").read_text(encoding="utf-8"))
+    owner = meta.get("created_by")
+    if user.get("role") != "admin" and owner and owner != user.get("username"):
+        raise HTTPException(403, "غير مسموح")
     mapping = {
         "markdown": root / "report.md",
         "json": root / "report.json",
@@ -186,12 +357,11 @@ def download(review_id: str, kind: str):
 
 
 @app.get("/api/jobs/{review_id}")
-def job_status(review_id: str) -> dict:
+def job_status(review_id: str, _user: dict = Depends(require_user)) -> dict:
     with _jobs_lock:
         job = _jobs.get(review_id)
     if not job:
-        # Fall back to persisted meta
-        root = default_data_dir(_session_config) / review_id
+        root = default_data_dir(_base_config) / review_id
         if root.exists() and (root / "meta.json").exists():
             meta = json.loads((root / "meta.json").read_text(encoding="utf-8"))
             return {
@@ -204,80 +374,97 @@ def job_status(review_id: str) -> dict:
     return job
 
 
-@app.post("/api/settings")
-def update_settings(body: SettingsUpdate) -> dict:
-    global _session_api_key, _session_config
-    if body.api_key is not None:
-        key = body.api_key.strip()
-        _session_api_key = key or None
-        if key:
-            os.environ["ANTHROPIC_API_KEY"] = key
-    if body.max_cost is not None:
-        _session_config = _session_config.model_copy(update={"max_cost": body.max_cost})
-    return {
-        "api_key_set": bool(_session_api_key or os.getenv("ANTHROPIC_API_KEY")),
-        "max_cost": _session_config.max_cost,
-    }
-
-
 @app.get("/api/settings")
-def get_settings() -> dict:
-    return {
-        "api_key_set": bool(_session_api_key or os.getenv("ANTHROPIC_API_KEY")),
-        "max_cost": _session_config.max_cost,
-        "model": _session_config.llm_model,
-        "host": _session_config.host,
-        "port": _session_config.port,
-    }
+def get_settings(user: dict = Depends(require_user)) -> dict:
+    return _settings_payload(user["username"])
+
+
+@app.post("/api/settings")
+def update_settings(body: SettingsUpdate, user: dict = Depends(require_user)) -> dict:
+    updates: dict[str, Any] = {}
+    if body.anthropic_api_key is not None:
+        updates["anthropic_api_key"] = body.anthropic_api_key
+    if body.groq_api_key is not None:
+        updates["groq_api_key"] = body.groq_api_key
+    if body.max_cost is not None:
+        updates["max_cost"] = body.max_cost
+    if body.llm_provider:
+        if body.llm_provider not in {"anthropic", "groq"}:
+            raise HTTPException(400, "مزود غير مدعوم")
+        updates["llm_provider"] = body.llm_provider
+    if body.llm_model:
+        updates["llm_model"] = body.llm_model
+    if body.whisper_model:
+        updates["whisper_model"] = body.whisper_model
+    update_user_settings(user["username"], updates)
+    return _settings_payload(user["username"])
 
 
 @app.get("/api/eval")
-def eval_results() -> dict:
+def eval_results(_admin: dict = Depends(require_admin)) -> dict:
     results = Path.cwd() / "results" / "eval_summary.json"
     if not results.exists():
-        return {"available": False, "message": "لا توجد نتائج تقييم محفوظة بعد. شغّل: video-reviewer eval"}
+        return {"available": False, "message": "لا توجد نتائج تقييم محفوظة"}
     data = json.loads(results.read_text(encoding="utf-8"))
     return {"available": True, "summary": data}
 
 
 @app.post("/api/reviews")
 async def create_review(
-    video: UploadFile = File(...),
+    video: Optional[UploadFile] = File(None),
+    drive_url: str = Form(""),
     field: str = Form("general"),
     level: str = Form("intermediate"),
     language: str = Form("auto"),
     stack: str = Form(""),
     glossary: str = Form(""),
     title: str = Form(""),
-    max_cost: Optional[float] = Form(None),
-    api_key: Optional[str] = Form(None),
+    provider: str = Form(""),
+    model: str = Form(""),
+    user: dict = Depends(require_user),
 ):
-    allowed = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}
-    suffix = Path(video.filename or "upload.mp4").suffix.lower()
-    if suffix not in allowed:
-        raise HTTPException(400, "نوع الملف غير مدعوم")
+    prefs = get_user_settings(user["username"])
+    provider = (provider or prefs.get("llm_provider") or "groq").lower().strip()
+    if provider not in {"anthropic", "groq"}:
+        raise HTTPException(400, "مزود غير مدعوم")
+
+    drive_url = (drive_url or "").strip()
+    has_file = bool(video and video.filename)
+    if not has_file and not drive_url:
+        raise HTTPException(400, "ارفع فيديو أو الصق لينك Google Drive")
+    if has_file and drive_url:
+        raise HTTPException(400, "اختَر إما ملف أو لينك Drive")
+
+    key = get_user_api_key(user["username"], provider)
+    if not key:
+        raise HTTPException(400, "مفتاح API غير مضبوط لحسابك. افتح الإعدادات وأضفه.")
 
     review_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
-    root = default_data_dir(_session_config) / review_id
+    cfg = _config_for_user(user["username"])
+    root = default_data_dir(cfg) / review_id
     src_dir = root / "source"
     src_dir.mkdir(parents=True, exist_ok=True)
-    dest = src_dir / (Path(video.filename or f"video{suffix}").name)
-    with dest.open("wb") as f:
-        shutil.copyfileobj(video.file, f)
+
+    dest: Optional[Path] = None
+    if has_file:
+        assert video is not None
+        suffix = Path(video.filename or "upload.mp4").suffix.lower()
+        if suffix not in MEDIA_EXT:
+            raise HTTPException(400, "نوع الملف غير مدعوم")
+        dest = src_dir / Path(video.filename or f"video{suffix}").name
+        with dest.open("wb") as f:
+            shutil.copyfileobj(video.file, f)
 
     course = CourseMeta(
-        field=field,
-        level=level,
-        language=language,
+        field=field or "general",
+        level=level or "intermediate",
+        language=language or "auto",
         stack=[s.strip() for s in stack.split(",") if s.strip()],
         glossary=[g.strip() for g in glossary.split(",") if g.strip()],
         title=title or None,
     )
-    cfg = _session_config
-    if max_cost is not None:
-        cfg = cfg.model_copy(update={"max_cost": max_cost})
-
-    key = (api_key or "").strip() or _session_api_key or os.getenv("ANTHROPIC_API_KEY")
+    chosen_model = (model or "").strip() or prefs.get("llm_model") or DEFAULT_MODELS[provider]
+    cfg = cfg.model_copy(update={"llm_provider": provider, "llm_model": chosen_model})
 
     with _jobs_lock:
         _jobs[review_id] = {
@@ -285,7 +472,25 @@ async def create_review(
             "status": "queued",
             "stages": {s: {"status": "pending"} for s in Pipeline.STAGES},
             "error": None,
+            "provider": provider,
+            "model": chosen_model,
+            "created_by": user.get("username"),
         }
+
+    # persist owner early
+    (root / "meta.json").write_text(
+        json.dumps(
+            {
+                "review_id": review_id,
+                "created_by": user.get("username"),
+                "processing_status": "queued",
+                "video_name": dest.name if dest else "drive",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     def runner() -> None:
         def on_progress(stage: str, status: str, error: Optional[str] = None) -> None:
@@ -297,8 +502,14 @@ async def create_review(
                     job["error"] = error
 
         try:
+            video_path = dest
+            if drive_url:
+                with _jobs_lock:
+                    _jobs[review_id]["status"] = "downloading"
+                video_path = download_from_drive(drive_url, src_dir)
+            assert video_path is not None
             pipe = Pipeline(
-                video=dest,
+                video=video_path,
                 course=course,
                 config=cfg,
                 review_id=review_id,
@@ -308,6 +519,17 @@ async def create_review(
                 on_progress=on_progress,
                 copy_video=False,
             )
+            # ensure ownership survives pipeline meta overwrite
+            original_persist = pipe._persist_meta
+
+            def persist_with_owner() -> None:
+                original_persist()
+                meta_path = root / "meta.json"
+                meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+                meta["created_by"] = user.get("username")
+                meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            pipe._persist_meta = persist_with_owner  # type: ignore[method-assign]
             pipe.run()
             with _jobs_lock:
                 _jobs[review_id]["status"] = "completed"
@@ -319,4 +541,4 @@ async def create_review(
                 _jobs[review_id]["error"] = str(e)
 
     threading.Thread(target=runner, daemon=True).start()
-    return {"review_id": review_id, "status": "queued"}
+    return {"review_id": review_id, "status": "queued", "provider": provider, "model": chosen_model}

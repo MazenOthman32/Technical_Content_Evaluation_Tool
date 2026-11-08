@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Instant Plus Video Reviewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <div class="app" id="app-shell">
+    <button type="button" class="mobile-toggle" id="menu-toggle" aria-label="القائمة">☰</button>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <img src="/static/brand/instant-plus-logo.png" alt="Instant+" />
+        <div class="brand-caption">Video Reviewer</div>
+      </div>
+      <nav class="nav" id="nav">
+        <button class="nav-item active" data-page="new-review">مراجعة جديدة</button>
+        <button class="nav-item" data-page="history">السجل</button>
+        <button class="nav-item" data-page="reports">التقارير</button>
+        <button class="nav-item" data-page="settings">الإعدادات</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div id="user-chip"></div>
+        <button type="button" class="btn ghost logout-btn" id="logout-btn">خروج</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="page active" id="page-new-review">
+        <div class="page-header">
+          <div><h1>مراجعة جديدة</h1></div>
+        </div>
+        <form id="review-form" class="panel simple-form">
+          <input type="hidden" name="level" value="intermediate" />
+          <input type="hidden" name="language" value="auto" />
+          <input type="hidden" name="field" value="general" />
+
+          <div class="source-tabs" id="source-tabs">
+            <button type="button" class="source-tab active" data-source="drive">Google Drive</button>
+            <button type="button" class="source-tab" data-source="file">ملف</button>
+          </div>
+
+          <div id="source-drive" class="source-panel">
+            <label>لينك Drive
+              <input name="drive_url" id="drive-url" type="url" placeholder="https://drive.google.com/file/d/..." />
+            </label>
+          </div>
+
+          <div id="source-file" class="source-panel" hidden>
+            <div class="dropzone" id="dropzone">
+              <strong>اسحب الفيديو أو اختر ملفاً</strong>
+              <input type="file" id="video-input" accept="video/*" hidden />
+              <div class="file-name" id="file-name">لم يتم اختيار ملف</div>
+              <div style="margin-top:0.8rem">
+                <button type="button" class="btn secondary" id="pick-file">اختيار ملف</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="simple-fields">
+            <label>المزود
+              <select name="provider" id="provider-select">
+                <option value="groq" selected>Groq</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </label>
+            <label>الموديل
+              <select name="model" id="model-select"></select>
+            </label>
+          </div>
+
+          <div class="actions" style="margin-top:1.1rem">
+            <button class="btn" type="submit" id="start-btn">بدء المراجعة</button>
+          </div>
+          <div id="form-error" class="error-banner" hidden></div>
+        </form>
+
+        <div class="panel" id="progress-panel" hidden>
+          <h2>التقدم</h2>
+          <div id="job-status" class="panel-muted" style="margin-bottom:0.75rem"></div>
+          <div class="stages" id="stages"></div>
+          <div class="actions" style="margin-top:1rem">
+            <button class="btn secondary" id="open-results" hidden>عرض النتائج</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-results">
+        <div class="page-header">
+          <div>
+            <h1>النتائج</h1>
+            <p id="results-subtitle"></p>
+          </div>
+          <div class="actions" id="results-downloads"></div>
+        </div>
+        <div id="results-error" class="error-banner" hidden></div>
+        <div class="panel" id="results-summary"></div>
+        <div class="workspace">
+          <div class="panel video-box">
+            <h2>الفيديو</h2>
+            <video id="player" controls></video>
+          </div>
+          <div class="panel">
+            <h2>الملاحظات</h2>
+            <div class="filters">
+              <select id="filter-severity">
+                <option value="">الخطورة</option>
+                <option value="critical">critical</option>
+                <option value="medium">medium</option>
+                <option value="minor">minor</option>
+                <option value="unsure">unsure</option>
+              </select>
+              <select id="filter-category">
+                <option value="">الفئة</option>
+                <option value="factual">factual</option>
+                <option value="code_bug">code_bug</option>
+                <option value="outdated">outdated</option>
+                <option value="mismatch">mismatch</option>
+                <option value="pedagogy">pedagogy</option>
+                <option value="quiz">quiz</option>
+              </select>
+            </div>
+            <div class="findings-list" id="findings-list"></div>
+            <div id="finding-detail" style="margin-top:0.9rem"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-history">
+        <div class="page-header"><div><h1>السجل</h1></div></div>
+        <div class="panel" id="history-panel"></div>
+      </section>
+
+      <section class="page" id="page-reports">
+        <div class="page-header"><div><h1>التقارير</h1></div></div>
+        <div class="panel" id="reports-panel"></div>
+      </section>
+
+      <section class="page" id="page-settings">
+        <div class="page-header"><div><h1>الإعدادات</h1></div></div>
+        <form class="panel" id="settings-form">
+          <h2>مفاتيح API لحسابك فقط</h2>
+          <div class="form-grid">
+            <label>Anthropic API Key
+              <input name="anthropic_api_key" type="password" placeholder="sk-ant-..." autocomplete="off" />
+              <span class="help" id="anthropic-status"></span>
+            </label>
+            <label>Groq API Key
+              <input name="groq_api_key" type="password" placeholder="gsk_..." autocomplete="off" />
+              <span class="help" id="groq-status"></span>
+            </label>
+          </div>
+
+          <h2 style="margin-top:1.2rem">تفضيلات المراجعة</h2>
+          <div class="form-grid">
+            <label>المزود الافتراضي
+              <select name="llm_provider" id="settings-provider">
+                <option value="groq">Groq</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </label>
+            <label>الموديل الافتراضي
+              <select name="llm_model" id="settings-model"></select>
+            </label>
+            <label>حد التكلفة (USD)
+              <input name="max_cost" type="number" step="0.1" min="0" placeholder="مثلاً 4" />
+            </label>
+            <label>موديل Whisper
+              <select name="whisper_model">
+                <option value="auto">auto</option>
+                <option value="small">small</option>
+                <option value="medium">medium</option>
+                <option value="large-v3">large-v3</option>
+              </select>
+            </label>
+          </div>
+          <div class="actions" style="margin-top:1rem">
+            <button class="btn" type="submit">حفظ الإعدادات</button>
+          </div>
+          <div id="settings-msg" class="success-banner" hidden></div>
+        </form>
+      </section>
+    </main>
+  </div>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

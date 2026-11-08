@@ -1,4 +1,7 @@
 .env
+web/.env.local
+web/node_modules/
+web/.next/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -8,6 +11,8 @@ dist/
 build/
 *.egg-info/
 data/reviews/
+data/app_settings.json
+data/users.json
 results/
 *.wav
 .DS_Store

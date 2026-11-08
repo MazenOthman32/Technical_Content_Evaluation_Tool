@@ -19,6 +19,7 @@ class SystemConfig(BaseModel):
     pre_change_offset: float = 0.4
     ocr_engine: str = "pytesseract"
     ocr_high_confidence: float = 70.0
+    llm_provider: str = "anthropic"  # anthropic | groq
     llm_model: str = "claude-sonnet-5-5"
     temperature: float = 0.0
     evidence_similarity: float = 85.0
