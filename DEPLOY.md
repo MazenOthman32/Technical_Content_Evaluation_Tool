@@ -2,17 +2,15 @@
 
 ## إصلاح خطأ 404 على Vercel
 
-الـ 404 يظهر عادة لأن Vercel بينشر من جذر الريبو مش من مجلد `web`.
+تطبيق Next.js موجود في **جذر الريبو** (مش داخل `web`). بعد أي push جديد، اعمل Redeploy من Vercel.
 
 في لوحة Vercel للمشروع:
 
-1. **Settings → General → Root Directory**
-2. اضغط Edit واكتب: `web`
-3. احفظ
-4. **Settings → Environment Variables** وأضف:
+1. **Settings → General → Root Directory** → اتركه فاضي أو `.` (مش `web`)
+2. **Settings → Environment Variables** وأضف:
    - `NEXT_PUBLIC_SUPABASE_URL` = `https://ezvttuiqxswzrqyzogak.supabase.co`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = (anon key من Supabase)
-5. **Deployments → … → Redeploy** (مع Bypass Cache إن وُجد)
+3. **Deployments → … → Redeploy** (مع Bypass Cache إن وُجد)
 
 بعدها افتح رابط المشروع — المفروض يحوّلك لـ `/login`.
 
@@ -37,17 +35,14 @@
      { "username": "reviewer", "full_name": "Content Reviewer", "role": "reviewer" }
      ```
 
-## 2) النشر من مجلد web (بديل CLI)
+## 2) النشر بـ CLI
 
 ```powershell
-cd web
 copy .env.local.example .env.local
 # عبّي المفاتيح
 npm install
 npx vercel --prod
 ```
-
-مهم: نفّذ الأمر من داخل مجلد `web`، أو اضبط Root Directory = `web` في الداشبورد.
 
 ## 3) عزل المفاتيح
 
