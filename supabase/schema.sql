@@ -231,3 +231,12 @@ grant select, insert, update, delete on public.profiles to authenticated, servic
 grant select, insert, update, delete on public.user_settings to authenticated, service_role;
 grant select, insert, update, delete on public.reviews to authenticated, service_role;
 grant select on public.profiles to anon;
+
+-- Ensure Mazen Super Admin profile role (run after user exists in Auth)
+update public.profiles
+set role = 'super_admin',
+    full_name = coalesce(nullif(full_name, ''), 'Mazen Othman'),
+    username = coalesce(nullif(username, ''), 'mazen'),
+    is_active = true,
+    updated_at = now()
+where lower(email) = lower('MazenOthman320@gmail.com');

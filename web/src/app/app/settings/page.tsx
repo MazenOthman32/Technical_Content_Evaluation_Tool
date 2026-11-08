@@ -328,42 +328,44 @@ export default function SettingsPage() {
           <div className="panel">
             <h2 style={{ margin: "0 0 0.8rem", fontSize: "1.05rem" }}>المستخدمون</h2>
             {usersErr ? <div className="banner error">{usersErr}</div> : null}
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>المستخدم</th>
-                  <th>الدور</th>
-                  <th>Anthropic</th>
-                  <th>Groq</th>
-                  <th>OpenAI</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      <strong>{u.full_name || u.username}</strong>
-                      <div className="help">{u.email}</div>
-                    </td>
-                    <td>
-                      <span className="pill">{u.role}</span>
-                    </td>
-                    <td>
-                      <KeyBadge state={u.keys.anthropic.state} label={u.keys.anthropic.label} />
-                      <div className="help">{u.keys.anthropic.masked || "—"}</div>
-                    </td>
-                    <td>
-                      <KeyBadge state={u.keys.groq.state} label={u.keys.groq.label} />
-                      <div className="help">{u.keys.groq.masked || "—"}</div>
-                    </td>
-                    <td>
-                      <KeyBadge state={u.keys.openai.state} label={u.keys.openai.label} />
-                      <div className="help">{u.keys.openai.masked || "—"}</div>
-                    </td>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>المستخدم</th>
+                    <th>الدور</th>
+                    <th>Anthropic</th>
+                    <th>Groq</th>
+                    <th>OpenAI</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.id}>
+                      <td>
+                        <strong>{u.full_name || u.username}</strong>
+                        <div className="help">{u.email}</div>
+                      </td>
+                      <td>
+                        <span className="pill">{u.role}</span>
+                      </td>
+                      <td>
+                        <KeyBadge state={u.keys.anthropic.state} label={u.keys.anthropic.label} />
+                        <div className="help">{u.keys.anthropic.masked || "—"}</div>
+                      </td>
+                      <td>
+                        <KeyBadge state={u.keys.groq.state} label={u.keys.groq.label} />
+                        <div className="help">{u.keys.groq.masked || "—"}</div>
+                      </td>
+                      <td>
+                        <KeyBadge state={u.keys.openai.state} label={u.keys.openai.label} />
+                        <div className="help">{u.keys.openai.masked || "—"}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       ) : null}

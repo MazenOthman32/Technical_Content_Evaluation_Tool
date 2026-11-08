@@ -22,6 +22,8 @@ export default function LoginPage() {
       const supabase = createClient();
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) throw err;
+
+      await fetch("/api/auth/ensure-role", { method: "POST" }).catch(() => null);
       router.replace("/app/dashboard");
       router.refresh();
     } catch (ex: unknown) {
@@ -43,11 +45,18 @@ export default function LoginPage() {
           <form className="form" onSubmit={onSubmit}>
             <div>
               <h2 style={{ margin: 0 }}>تسجيل الدخول</h2>
-              <p className="help">الحسابات تُدار بواسطة الأدمن فقط</p>
+              <p className="help">Super Admin: MazenOthman320@gmail.com</p>
             </div>
             <label>
               البريد الإلكتروني
-              <input name="email" type="email" required placeholder="name@company.com" autoComplete="username" />
+              <input
+                name="email"
+                type="email"
+                required
+                defaultValue="MazenOthman320@gmail.com"
+                placeholder="name@company.com"
+                autoComplete="username"
+              />
             </label>
             <label>
               كلمة المرور
@@ -71,7 +80,13 @@ export default function LoginPage() {
               </div>
             </label>
             <button className="btn" type="submit" disabled={loading}>
-              {loading ? <><span className="spinner" /> جاري الدخول...</> : "دخول آمن"}
+              {loading ? (
+                <>
+                  <span className="spinner" /> جاري الدخول...
+                </>
+              ) : (
+                "دخول كـ Admin"
+              )}
             </button>
             {error ? <div className="banner error">{error}</div> : null}
           </form>

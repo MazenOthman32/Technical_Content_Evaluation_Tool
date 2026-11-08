@@ -22,6 +22,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         router.replace("/login");
         return;
       }
+
+      await fetch("/api/auth/ensure-role", { method: "POST" }).catch(() => null);
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("full_name,username,role,is_active")
@@ -38,16 +41,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     });
   }, [router]);
 
-  const links = useMemo(() => {
-    const base = [
-      { href: "/app/dashboard", label: "لوحة التحليلات" },
+  useEffect(() => {
+    document.body.classList.toggle("nav-open", open);
+    return () => document.body.classList.remove("nav-open");
+  }, [open]);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  const links = useMemo(
+    () => [
+      { href: "/app/dashboard", label: "Analysis" },
       { href: "/app/review", label: "مراجعة جديدة" },
       { href: "/app/history", label: "السجل" },
       { href: "/app/reports", label: "التقارير" },
       { href: "/app/settings", label: "الإعدادات" },
-    ];
-    return base;
-  }, []);
+    ],
+    []
+  );
+
+  const pageTitle =
+    links.find((l) => pathname.startsWith(l.href))?.label || "Instant+";
 
   async function logout() {
     const supabase = createClient();
@@ -58,12 +73,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="shell">
-      <button className="menu-btn" type="button" onClick={() => setOpen(true)} aria-label="القائمة">
-        ☰
-      </button>
+      <header className="mobile-bar">
+        <button className="menu-btn" type="button" onClick={() => setOpen(true)} aria-label="القائمة">
+          ☰
+        </button>
+        <div className="mobile-bar-title">{pageTitle}</div>
+        <ThemeToggle />
+      </header>
+
       <div className={`backdrop ${open ? "open" : ""}`} onClick={() => setOpen(false)} />
       <aside className={`sidebar ${open ? "open" : ""}`}>
-        <Logo />
+        <div className="sidebar-head">
+          <Logo />
+          <button className="icon-btn sidebar-close" type="button" onClick={() => setOpen(false)} aria-label="إغلاق">
+            ✕
+          </button>
+        </div>
         <nav className="nav">
           {links.map((l) => (
             <Link
@@ -78,14 +103,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="side-foot">
           <div className="user-chip">{userLabel || "…"}</div>
-          {isStaff(role) ? <div className="help" style={{ color: "#93a0c7", paddingInline: 8 }}>صلاحيات إدارية مفعّلة</div> : null}
+          {isStaff(role) ? (
+            <div className="help" style={{ color: "#93a0c7", paddingInline: 8 }}>
+              صلاحيات إدارية مفعّلة
+            </div>
+          ) : null}
           <button type="button" className="btn ghost" onClick={logout}>
             خروج
           </button>
         </div>
       </aside>
       <main className="main">
-        <div className="topbar">
+        <div className="topbar desktop-only">
           <div />
           <ThemeToggle />
         </div>

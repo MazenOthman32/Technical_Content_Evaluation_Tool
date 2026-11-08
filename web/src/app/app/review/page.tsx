@@ -109,7 +109,7 @@ export default function ReviewPage() {
     <div>
       <h1 className="page-title">مراجعة جديدة</h1>
       <p className="page-sub">ارفع فيديو أو الصق رابط Drive وابدأ تقييم الجودة</p>
-      <form className="panel form" onSubmit={onSubmit} style={{ maxWidth: 720, marginTop: "1rem" }}>
+      <form className="panel form review-form" onSubmit={onSubmit}>
         <div className="tabs">
           <button type="button" className={source === "drive" ? "active" : ""} onClick={() => setSource("drive")}>
             Google Drive

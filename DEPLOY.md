@@ -8,27 +8,38 @@
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY` (سيرفر فقط — لا تضعه في `NEXT_PUBLIC_`)
 
-## 2) إنشاء Super Admin
+## 2) إنشاء الأدمنز على Supabase Auth (حسابات عادية)
 
-في `.env` / `web/.env.local`:
+الحسابات لازم تتعمل كـ **Users** في Authentication — مش workaround محلي.
+
+في `.env` أو `web/.env.local`:
 
 ```env
+SUPABASE_URL=https://ezvttuiqxswzrqyzogak.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...   # من Project Settings → API → service_role
 SUPER_ADMIN_EMAIL=MazenOthman320@gmail.com
-SUPER_ADMIN_PASSWORD=********
+SUPER_ADMIN_PASSWORD=282002mm
 ANTHROPIC_API_KEY=...
 GROQ_API_KEY=...
 OPENAI_API_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
 ثم:
 
 ```powershell
 cd web
-node scripts/seed-super-admin.mjs
+npm run seed:admins
 ```
 
-Supabase يخزّن كلمة المرور بـ **bcrypt**. السكربت يزرع مفاتيح API الافتراضية في حساب الـ Super Admin من متغيرات البيئة.
+السكربت ينشئ/يحدّث في Auth + `profiles` + `user_settings`:
+
+| الدور | الإيميل | الباسورد الافتراضي |
+|---|---|---|
+| super_admin | MazenOthman320@gmail.com | من `SUPER_ADMIN_PASSWORD` |
+| admin | admin@instantplus.com | admin123 |
+| reviewer | reviewer@instantplus.com | reviewer123 |
+
+كلمات المرور تتخزن بـ **bcrypt** داخل Supabase Auth. مفاتيح API الافتراضية تتزرع لحساب الـ Super Admin فقط.
 
 ## 3) Vercel
 

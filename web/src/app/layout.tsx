@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import { ToastProvider } from "@/components/Toast";
 import "./globals.css";
@@ -11,6 +11,13 @@ const font = IBM_Plex_Sans_Arabic({
 export const metadata: Metadata = {
   title: "Instant+ Technical Content Evaluation",
   description: "Enterprise AI evaluation workspace for Instant Plus",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

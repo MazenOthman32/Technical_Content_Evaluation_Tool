@@ -43,32 +43,34 @@ export default function HistoryPage() {
         {err ? <div className="banner error">{err}</div> : null}
         {!loading && !rows.length && !err ? <p className="help">لا توجد مراجعات بعد.</p> : null}
         {rows.length ? (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>الفيديو</th>
-                <th>التاريخ</th>
-                <th>الحالة</th>
-                <th>الحكم</th>
-                <th>الجودة</th>
-                <th>الزمن</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.video_name || r.id}</td>
-                  <td>{new Date(r.created_at).toLocaleString("ar")}</td>
-                  <td>
-                    <span className="pill">{r.status}</span>
-                  </td>
-                  <td>{r.proposed_verdict || "—"}</td>
-                  <td>{r.quality_score ?? "—"}</td>
-                  <td>{r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}ث` : "—"}</td>
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>الفيديو</th>
+                  <th>التاريخ</th>
+                  <th>الحالة</th>
+                  <th>الحكم</th>
+                  <th>الجودة</th>
+                  <th>الزمن</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.video_name || r.id}</td>
+                    <td>{new Date(r.created_at).toLocaleString("ar")}</td>
+                    <td>
+                      <span className="pill">{r.status}</span>
+                    </td>
+                    <td>{r.proposed_verdict || "—"}</td>
+                    <td>{r.quality_score ?? "—"}</td>
+                    <td>{r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}ث` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : null}
       </div>
     </div>
