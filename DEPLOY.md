@@ -1,5 +1,23 @@
 # نشر Instant Plus Video Reviewer
 
+## إصلاح خطأ 404 على Vercel
+
+الـ 404 يظهر عادة لأن Vercel بينشر من جذر الريبو مش من مجلد `web`.
+
+في لوحة Vercel للمشروع:
+
+1. **Settings → General → Root Directory**
+2. اضغط Edit واكتب: `web`
+3. احفظ
+4. **Settings → Environment Variables** وأضف:
+   - `NEXT_PUBLIC_SUPABASE_URL` = `https://ezvttuiqxswzrqyzogak.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = (anon key من Supabase)
+5. **Deployments → … → Redeploy** (مع Bypass Cache إن وُجد)
+
+بعدها افتح رابط المشروع — المفروض يحوّلك لـ `/login`.
+
+---
+
 ## 1) Supabase
 
 المشروع الحالي: `ezvttuiqxswzrqyzogak`
@@ -18,25 +36,18 @@
      ```json
      { "username": "reviewer", "full_name": "Content Reviewer", "role": "reviewer" }
      ```
-4. (اختياري للـ DB المباشر) connection string:
-   `postgresql://postgres:[PASSWORD]@db.ezvttuiqxswzrqyzogak.supabase.co:5432/postgres`
 
-## 2) الواجهة على Vercel
+## 2) النشر من مجلد web (بديل CLI)
 
 ```powershell
 cd web
 copy .env.local.example .env.local
-# عبّي SUPABASE values
+# عبّي المفاتيح
 npm install
-npm run build
 npx vercel --prod
 ```
 
-أو اربط مستودع GitHub بمشروع Vercel واضبط Environment Variables:
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `NEXT_PUBLIC_PROCESS_API_URL` (اختياري: رابط سيرفر المعالجة FastAPI)
+مهم: نفّذ الأمر من داخل مجلد `web`، أو اضبط Root Directory = `web` في الداشبورد.
 
 ## 3) عزل المفاتيح
 
@@ -47,9 +58,6 @@ npx vercel --prod
 ## 4) معالجة الفيديو
 
 معالجة Whisper/FFmpeg/OCR تحتاج سيرفر فيه هذه الأدوات (مش مناسب لـ Vercel Serverless).
-
-- الواجهة + Auth + Settings + السجل تعمل على Vercel + Supabase
-- للمعالجة الكاملة شغّل محلياً:
 
 ```powershell
 video-reviewer ui
