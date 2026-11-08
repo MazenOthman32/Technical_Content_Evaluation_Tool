@@ -108,18 +108,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               صلاحيات إدارية مفعّلة
             </div>
           ) : null}
-          <button type="button" className="btn ghost" onClick={logout}>
-            خروج
-          </button>
+          <div className="side-actions">
+            <ThemeToggle />
+            <button type="button" className="btn ghost" onClick={logout}>
+              خروج
+            </button>
+          </div>
         </div>
       </aside>
-      <main className="main">
-        <div className="topbar desktop-only">
-          <div />
-          <ThemeToggle />
-        </div>
-        {children}
-      </main>
+      <main className="main">{children}</main>
     </div>
   );
 }

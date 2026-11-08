@@ -35,10 +35,14 @@ export default function HistoryPage() {
   }, []);
 
   return (
-    <div>
-      <h1 className="page-title">السجل</h1>
-      <p className="page-sub">كل التقييمات المرتبطة بصلاحياتك</p>
-      <div className="panel" style={{ marginTop: "1rem" }}>
+    <div className="page-fill">
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">السجل</h1>
+          <p className="page-sub">كل التقييمات المرتبطة بصلاحياتك</p>
+        </div>
+      </div>
+      <div className="panel settings-panel">
         {loading ? <Skeleton rows={5} /> : null}
         {err ? <div className="banner error">{err}</div> : null}
         {!loading && !rows.length && !err ? <p className="help">لا توجد مراجعات بعد.</p> : null}

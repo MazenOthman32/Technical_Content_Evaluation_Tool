@@ -166,11 +166,15 @@ export default function SettingsPage() {
   }
 
   return (
-    <div>
-      <h1 className="page-title">الإعدادات</h1>
-      <p className="page-sub">إدارة المفاتيح والتفضيلات{isStaff(role) ? " والمستخدمين" : ""}</p>
+    <div className="page-fill settings-page">
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">الإعدادات</h1>
+          <p className="page-sub">إدارة المفاتيح والتفضيلات{isStaff(role) ? " والمستخدمين" : ""}</p>
+        </div>
+      </div>
 
-      <div className="tabs" style={{ margin: "1rem 0" }}>
+      <div className="tabs">
         <button type="button" className={tab === "keys" ? "active" : ""} onClick={() => setTab("keys")}>
           مفاتيح API
         </button>
@@ -185,7 +189,7 @@ export default function SettingsPage() {
       </div>
 
       {(tab === "keys" || tab === "prefs") && (
-        <form className="panel form" onSubmit={saveSettings} style={{ maxWidth: 860 }}>
+        <form className="panel form settings-panel" onSubmit={saveSettings}>
           {tab === "keys" ? (
             <>
               <h2 style={{ margin: 0, fontSize: "1.05rem" }}>واجهة إدارة المفاتيح</h2>
@@ -271,10 +275,14 @@ export default function SettingsPage() {
       )}
 
       {tab === "users" && isStaff(role) ? (
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <form className="panel form" onSubmit={createUser}>
+        <div className="users-stack">
+          <form className="panel form settings-panel" onSubmit={createUser}>
             <h2 style={{ margin: 0, fontSize: "1.05rem" }}>إنشاء مستخدم جديد</h2>
-            <p className="help">كلمات المرور تُخزَّن مشفّرة عبر Supabase Auth (bcrypt). الأدمن فقط ينشئ الحسابات.</p>
+            <p className="help">
+              {role === "super_admin"
+                ? "Super Admin يقدر يضيف Super Admin أو Admin أو Reviewer. الحسابات تتعمل على Supabase Auth."
+                : "الأدمن يقدر يضيف Reviewer فقط."}
+            </p>
             <div className="form-grid">
               <label>
                 الاسم الكامل
@@ -296,7 +304,12 @@ export default function SettingsPage() {
                 الدور
                 <select name="role" defaultValue="reviewer">
                   <option value="reviewer">Reviewer</option>
-                  {role === "super_admin" ? <option value="admin">Admin</option> : null}
+                  {role === "super_admin" ? (
+                    <>
+                      <option value="admin">Admin</option>
+                      <option value="super_admin">Super Admin</option>
+                    </>
+                  ) : null}
                 </select>
               </label>
               <label>

@@ -40,10 +40,14 @@ export default function ReportsPage() {
   }
 
   return (
-    <div>
-      <h1 className="page-title">التقارير</h1>
-      <p className="page-sub">تنزيل مخرجات التقييم بصيغة JSON</p>
-      <div className="panel" style={{ display: "grid", gap: "0.75rem", marginTop: "1rem" }}>
+    <div className="page-fill">
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">التقارير</h1>
+          <p className="page-sub">تنزيل مخرجات التقييم بصيغة JSON</p>
+        </div>
+      </div>
+      <div className="panel settings-panel" style={{ display: "grid", gap: "0.75rem", alignContent: "start" }}>
         {loading ? <Skeleton rows={4} /> : null}
         {!loading && !rows.length ? <p className="help">لا توجد تقارير بعد.</p> : null}
         {rows.map((r) => (

@@ -57,9 +57,20 @@ export async function POST(request: Request) {
   const fullName = String(body.full_name || "").trim() || email.split("@")[0];
   const username = String(body.username || "").trim() || email.split("@")[0];
   let role = String(body.role || "reviewer");
-  if (!["admin", "reviewer"].includes(role)) role = "reviewer";
-  if (ctx.profile?.role !== "super_admin" && role === "admin") {
-    return NextResponse.json({ error: "فقط Super Admin ينشئ أدمن" }, { status: 403 });
+  const allowed =
+    ctx.profile?.role === "super_admin"
+      ? ["super_admin", "admin", "reviewer"]
+      : ["reviewer"];
+  if (!allowed.includes(role)) {
+    return NextResponse.json(
+      {
+        error:
+          ctx.profile?.role === "super_admin"
+            ? "دور غير صالح"
+            : "الأدمن العادي ينشئ Reviewer فقط — Super Admin يضيف Admin / Super Admin / Reviewer",
+      },
+      { status: 403 }
+    );
   }
   if (!email || password.length < 8) {
     return NextResponse.json({ error: "البريد وكلمة مرور (8+) مطلوبة" }, { status: 400 });

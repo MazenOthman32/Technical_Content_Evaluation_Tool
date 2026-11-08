@@ -60,7 +60,8 @@ button { cursor: pointer; }
 img { max-width: 100%; }
 
 .shell {
-  width: 100%;
+  width: 100vw;
+  max-width: 100%;
   min-height: 100dvh;
   height: 100dvh;
   display: grid;
@@ -120,20 +121,45 @@ img { max-width: 100%; }
 }
 
 .main {
-  padding: 1.15rem 1.35rem 1.35rem;
+  padding: 1.1rem clamp(0.9rem, 2vw, 1.6rem) 1.25rem;
   min-width: 0;
   min-height: 0;
   height: 100%;
+  width: 100%;
   overflow: auto;
   display: flex;
   flex-direction: column;
 }
 .page-fill {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 100%;
   width: 100%;
+  max-width: none;
+}
+.settings-page .tabs { margin: 0 0 1rem; }
+.settings-panel {
+  width: 100%;
+  max-width: none;
+  flex: 1;
+}
+.users-stack {
+  display: grid;
+  gap: 1rem;
+  flex: 1;
+  align-content: start;
+}
+.side-actions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.55rem;
+  align-items: center;
+}
+.side-actions .icon-btn {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.14);
+  color: #eef2ff;
 }
 .page-head {
   display: flex;
@@ -381,10 +407,12 @@ input, select, textarea {
 
 .login-page {
   min-height: 100dvh;
-  width: 100%;
+  height: 100dvh;
+  width: 100vw;
+  max-width: 100%;
   display: grid;
   place-items: center;
-  padding: 1.25rem;
+  padding: clamp(0.75rem, 2vw, 1.5rem);
   position: relative;
   overflow: hidden;
   background: #060914;
@@ -405,7 +433,8 @@ input, select, textarea {
 .login-wrap {
   position: relative;
   z-index: 1;
-  width: min(980px, 100%);
+  width: min(1100px, 100%);
+  height: min(640px, calc(100dvh - 2rem));
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
   gap: 1.1rem;
@@ -419,7 +448,8 @@ input, select, textarea {
   color: #eef2ff;
   background: linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
   padding: 2rem;
-  min-height: 440px;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -434,6 +464,7 @@ input, select, textarea {
   background: rgba(255,255,255,0.92);
   color: #0f172a;
   padding: 1.5rem;
+  height: 100%;
   display: grid;
   align-content: center;
 }
@@ -507,7 +538,7 @@ html[data-theme="dark"] .login-card {
   -webkit-overflow-scrolling: touch;
 }
 .table-scroll .table { min-width: 640px; }
-.review-form { max-width: 720px; margin-top: 1rem; width: 100%; }
+.review-form { max-width: none; margin-top: 0; width: 100%; }
 
 .mobile-bar { display: none; }
 .sidebar-head {
@@ -601,12 +632,14 @@ body.nav-open { overflow: hidden; }
   .page-sub { font-size: 0.85rem; }
   .panel { padding: 0.95rem; border-radius: 16px; }
   .form-grid, .login-wrap, .metrics { grid-template-columns: 1fr; }
-  .login-page { padding: 0.85rem; padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px)); }
-  .login-wrap { gap: 0.85rem; }
+  .login-page { padding: 0.85rem; padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px)); height: auto; min-height: 100dvh; }
+  .login-wrap { gap: 0.85rem; height: auto; }
   .login-hero {
     min-height: auto;
+    height: auto;
     padding: 1.25rem;
   }
+  .login-card { height: auto; }
   .login-hero h1 { font-size: clamp(1.45rem, 7vw, 2rem); }
   .login-card { padding: 1.15rem; }
   .tabs {
