@@ -1,4 +1,4 @@
-# Instant+ Technical Content Evaluation Tool
+# Technical Content Evaluation Tool
 
 أداة مؤسسية لتقييم جودة المحتوى التقني (فيديوهات تعليمية) بمساعدة الذكاء الاصطناعي، مع واجهة عربية، تقارير PDF، وتصنيف حسب الكورس.
 
