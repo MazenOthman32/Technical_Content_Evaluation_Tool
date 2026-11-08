@@ -7,7 +7,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import Skeleton from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { isStaff } from "@/lib/auth/roles";
-import { BUSINESS_CATEGORIES, categoryLabel, normalizeTags } from "@/lib/categories";
+import { COURSE_CATALOG, courseLabel, normalizeTags } from "@/lib/categories";
 import { readOrgMeta } from "@/lib/orgMeta";
 import { exportReviewPdf } from "@/lib/pdfReport";
 import {
@@ -189,48 +189,6 @@ export default function ReportDetailPage() {
     }
   }
 
-  function downloadJson() {
-    if (!row) return;
-    const blob = new Blob([JSON.stringify(report || row, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${row.id}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function downloadMarkdown() {
-    if (!row) return;
-    const md =
-      report?.markdown ||
-      [
-        `# تقرير مراجعة — ${row.video_name || row.id}`,
-        "",
-        `**الحالة:** ${statusLabel(row.status)}`,
-        `**الحكم:** ${verdictLabel(report?.proposed_verdict || row.proposed_verdict)}`,
-        `**الملاحظات:** ${findings.length}`,
-        "",
-        ...findings.flatMap((f) => [
-          `## ${f.id} — ${f.summary || ""}`,
-          `- الوقت: ${f.t_start || "—"} → ${f.t_end || "—"}`,
-          `- الخطورة: ${severityLabel(f.severity)}`,
-          `- الفئة: ${f.category || "—"}`,
-          `- الدليل: ${f.evidence?.quote || "—"}`,
-          `- المتوقع: ${f.expected || "—"}`,
-          `- التصحيح: ${f.correction || "—"}`,
-          "",
-        ]),
-      ].join("\n");
-    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${row.id}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   if (loading) {
     return (
       <div className="page-fill">
@@ -261,7 +219,7 @@ export default function ReportDetailPage() {
         <div>
           <h1 className="page-title">{row.video_name || row.id}</h1>
           <p className="page-sub">
-            {new Date(row.created_at).toLocaleString("ar")} · {categoryLabel(row.category)} ·{" "}
+            {new Date(row.created_at).toLocaleString("ar")} · {courseLabel(row.category)} ·{" "}
             {row.provider || "—"} / {row.model || report?.model || "—"}
           </p>
         </div>
@@ -269,14 +227,8 @@ export default function ReportDetailPage() {
           <Link className="btn secondary btn-sm" href="/app/reports">
             كل التقارير
           </Link>
-          <button className="btn secondary btn-sm" type="button" onClick={downloadMarkdown}>
-            Markdown
-          </button>
-          <button className="btn secondary btn-sm" type="button" onClick={downloadJson}>
-            JSON
-          </button>
           <button className="btn btn-sm" type="button" disabled={pdfBusy} onClick={exportPdf}>
-            {pdfBusy ? "جاري PDF..." : "تصدير PDF"}
+            {pdfBusy ? "جاري PDF..." : "تنزيل PDF"}
           </button>
           {isStaff(role) ? (
             <button className="btn secondary btn-sm btn-danger" type="button" onClick={() => setDeleteOpen(true)}>
@@ -314,13 +266,13 @@ export default function ReportDetailPage() {
       <div className="panel meta-editor settings-panel">
         <div className="form-grid">
           <label>
-            تصنيف الأعمال
+            الكورس
             <select
               value={row.category || "general"}
               disabled={savingMeta}
               onChange={(e) => saveMeta({ category: e.target.value })}
             >
-              {BUSINESS_CATEGORIES.map((c) => (
+              {COURSE_CATALOG.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
                 </option>
@@ -328,12 +280,12 @@ export default function ReportDetailPage() {
             </select>
           </label>
           <label>
-            إضافة وسم
+            وحدة / وسم
             <div className="inline-add">
               <input
                 value={tagDraft}
                 onChange={(e) => setTagDraft(e.target.value)}
-                placeholder="مثل: API, React, Security"
+                placeholder="مثل: Module 3, Hooks, Auth"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -376,10 +328,10 @@ export default function ReportDetailPage() {
 
       {row.status === "failed" ? (
         <div className="panel banner warn settings-panel" style={{ marginBottom: "1rem" }}>
-          <strong>فشلت المعالجة — التقرير مش مكتمل.</strong>
+          <strong>فشلت المعالجة — التقرير غير مكتمل.</strong>
           <p className="help" style={{ margin: "0.4rem 0 0" }}>
             {(report?.limitations || []).find((l) => l.includes("فشل")) ||
-              "حصل خطأ أثناء التحليل. جرّب إعادة المعالجة."}
+              "حدث خطأ أثناء التحليل. يمكنك إعادة المعالجة."}
           </p>
           <div className="row-actions" style={{ marginTop: "0.85rem" }}>
             {row.drive_url ? (
@@ -393,9 +345,9 @@ export default function ReportDetailPage() {
 
       {!ready && row.status !== "failed" ? (
         <div className="panel banner warn settings-panel">
-          <strong>التقرير لسه مش جاهز للمراجعة.</strong>
+          <strong>التقرير غير جاهز بعد للمراجعة.</strong>
           <p className="help" style={{ margin: "0.4rem 0 0" }}>
-            الطلب بحالة «{statusLabel(row.status)}» وبيتحلل دلوقتي أو مستني المعالج. الصفحة هتحدث تلقائياً.
+            الحالة الحالية «{statusLabel(row.status)}». يجري التحليل أو بانتظار المعالج، وستُحدَّث الصفحة تلقائياً.
           </p>
         </div>
       ) : ready ? (

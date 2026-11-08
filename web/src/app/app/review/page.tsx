@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
-import { BUSINESS_CATEGORIES } from "@/lib/categories";
+import { COURSE_CATALOG } from "@/lib/categories";
 import { MODELS } from "@/lib/models";
 import { createClient } from "@/lib/supabase/client";
 
@@ -217,9 +217,9 @@ export default function ReviewPage() {
             </select>
           </label>
           <label>
-            تصنيف الأعمال
+            الكورس
             <select value={category} onChange={(e) => setCategory(e.target.value)}>
-              {BUSINESS_CATEGORIES.map((c) => (
+              {COURSE_CATALOG.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
                 </option>
@@ -227,11 +227,11 @@ export default function ReviewPage() {
             </select>
           </label>
           <label>
-            وسوم (مفصولة بفاصلة)
+            وحدات / وسوم (مفصولة بفاصلة)
             <input
               value={tags}
               onChange={(e) => setTags(e.target.value)}
-              placeholder="React, API, Security"
+              placeholder="Module 1, Hooks, Auth"
             />
           </label>
         </div>

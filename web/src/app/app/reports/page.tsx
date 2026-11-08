@@ -5,9 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
 import Skeleton from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
-import { BUSINESS_CATEGORIES, categoryLabel } from "@/lib/categories";
+import { COURSE_CATALOG, courseLabel } from "@/lib/categories";
 import { isStaff } from "@/lib/auth/roles";
 import { readOrgMeta } from "@/lib/orgMeta";
+import { exportReviewsZip } from "@/lib/pdfReport";
 import { ReviewRow, hasReportContent, statusLabel, verdictLabel } from "@/lib/reports";
 import { createClient } from "@/lib/supabase/client";
 
@@ -17,10 +18,12 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState("reviewer");
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("all");
+  const [course, setCourse] = useState("all");
   const [status, setStatus] = useState("all");
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [zipBusy, setZipBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -57,7 +60,7 @@ export default function ReportsPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
-      if (category !== "all" && (r.category || "general") !== category) return false;
+      if (course !== "all" && (r.category || "general") !== course) return false;
       if (status !== "all" && r.status !== status) return false;
       if (!q) return true;
       const hay = [
@@ -66,7 +69,7 @@ export default function ReportsPage() {
         r.proposed_verdict,
         r.provider,
         r.model,
-        categoryLabel(r.category),
+        courseLabel(r.category),
         ...(r.tags || []),
       ]
         .filter(Boolean)
@@ -74,7 +77,7 @@ export default function ReportsPage() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [rows, query, category, status]);
+  }, [rows, query, course, status]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, ReviewRow[]>();
@@ -85,6 +88,8 @@ export default function ReportsPage() {
     }
     return [...map.entries()];
   }, [filtered]);
+
+  const selectedRows = filtered.filter((r) => selected[r.id]);
 
   async function confirmDelete() {
     if (!deleteId) return;
@@ -105,29 +110,49 @@ export default function ReportsPage() {
     }
   }
 
+  async function downloadBulk() {
+    const targets = selectedRows.length ? selectedRows : filtered.filter((r) => hasReportContent(r.report));
+    if (!targets.length) {
+      toast.push("لا توجد تقارير جاهزة للتنزيل", "error");
+      return;
+    }
+    setZipBusy(true);
+    try {
+      await exportReviewsZip(targets);
+      toast.push(`تم تنزيل ${targets.length} تقرير PDF`, "ok");
+    } catch (ex: unknown) {
+      toast.push(ex instanceof Error ? ex.message : "فشل التنزيل الجماعي", "error");
+    } finally {
+      setZipBusy(false);
+    }
+  }
+
   return (
     <div className="page-fill">
       <div className="page-head">
         <div>
           <h1 className="page-title">التقارير</h1>
-          <p className="page-sub">بحث، تصنيف، فتح، وتصدير كل تقييمات المحتوى</p>
+          <p className="page-sub">تنظيم حسب الكورس، فتح، حذف، وتنزيل PDF</p>
         </div>
+        <button className="btn" type="button" disabled={zipBusy} onClick={downloadBulk}>
+          {zipBusy
+            ? "جاري تجهيز PDF..."
+            : selectedRows.length
+              ? `تنزيل المحدد (${selectedRows.length})`
+              : "تنزيل الكل PDF"}
+        </button>
       </div>
 
       <div className="panel filters-bar settings-panel">
         <label>
           بحث
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="اسم الفيديو، وسم، حكم..."
-          />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="اسم الفيديو، كورس، وسم..." />
         </label>
         <label>
-          التصنيف
-          <select value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="all">الكل</option>
-            {BUSINESS_CATEGORIES.map((c) => (
+          الكورس
+          <select value={course} onChange={(e) => setCourse(e.target.value)}>
+            <option value="all">كل الكورسات</option>
+            {COURSE_CATALOG.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
               </option>
@@ -154,13 +179,20 @@ export default function ReportsPage() {
         {grouped.map(([cat, items]) => (
           <section key={cat} className="report-group">
             <div className="label-row" style={{ marginBottom: "0.65rem" }}>
-              <h2 className="section-title">{categoryLabel(cat)}</h2>
+              <h2 className="section-title">{courseLabel(cat)}</h2>
               <span className="help">{items.length} تقرير</span>
             </div>
             {items.map((r) => {
               const ready = hasReportContent(r.report);
               return (
                 <div key={r.id} className="report-row">
+                  <label className="report-check">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selected[r.id])}
+                      onChange={(e) => setSelected((prev) => ({ ...prev, [r.id]: e.target.checked }))}
+                    />
+                  </label>
                   <div className="report-row-main">
                     <strong className="report-row-title">{r.video_name || r.id}</strong>
                     <div className="help">
@@ -170,7 +202,7 @@ export default function ReportsPage() {
                       {r.quality_score != null ? ` · جودة ${r.quality_score}` : ""}
                     </div>
                     <div className="tag-row">
-                      <span className="pill">{categoryLabel(r.category)}</span>
+                      <span className="pill">{courseLabel(r.category)}</span>
                       {(r.tags || []).slice(0, 4).map((t) => (
                         <span key={t} className="pill">
                           {t}
@@ -183,7 +215,7 @@ export default function ReportsPage() {
                       className={`btn ${ready ? "" : "secondary"} btn-sm`}
                       href={`/app/reports/${encodeURIComponent(r.id)}`}
                     >
-                      {ready ? "فتح التقرير" : "عرض الحالة"}
+                      {ready ? "فتح" : "الحالة"}
                     </Link>
                     {isStaff(role) ? (
                       <button

@@ -37,15 +37,15 @@ export default function LoginPage() {
     <div className="login-page">
       <div className="login-wrap">
         <section className="login-hero">
-          <Logo tone="light" />
-          <h1>Technical Content Evaluation</h1>
-          <p>منصة مؤسسية لمراجعة جودة المحتوى التقني بذكاء اصطناعي — لفريق Instant Plus.</p>
+          <Logo />
+          <h1>تقييم المحتوى التقني</h1>
+          <p>مساحة مؤسسية لمراجعة الجودة بدقة ووضوح — لفريق Instant Plus.</p>
         </section>
         <section className="login-card">
           <form className="form" onSubmit={onSubmit}>
             <div>
               <h2 style={{ margin: 0 }}>تسجيل الدخول</h2>
-              <p className="help">Super Admin: MazenOthman320@gmail.com</p>
+              <p className="help">ادخل بيانات حسابك للمتابعة</p>
             </div>
             <label>
               البريد الإلكتروني
@@ -53,7 +53,6 @@ export default function LoginPage() {
                 name="email"
                 type="email"
                 required
-                defaultValue="MazenOthman320@gmail.com"
                 placeholder="name@company.com"
                 autoComplete="username"
               />

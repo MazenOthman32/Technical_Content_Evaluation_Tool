@@ -6,7 +6,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import Skeleton from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { isStaff } from "@/lib/auth/roles";
-import { categoryLabel } from "@/lib/categories";
+import { courseLabel } from "@/lib/categories";
 import { readOrgMeta } from "@/lib/orgMeta";
 import { ReviewRow, statusLabel, verdictLabel } from "@/lib/reports";
 import { createClient } from "@/lib/supabase/client";
@@ -95,7 +95,7 @@ export default function HistoryPage() {
               <thead>
                 <tr>
                   <th>الفيديو</th>
-                  <th>التصنيف</th>
+                  <th>الكورس</th>
                   <th>التاريخ</th>
                   <th>الحالة</th>
                   <th>الحكم</th>
@@ -108,7 +108,7 @@ export default function HistoryPage() {
                 {rows.map((r) => (
                   <tr key={r.id}>
                     <td>{r.video_name || r.id}</td>
-                    <td>{categoryLabel(r.category)}</td>
+                    <td>{courseLabel(r.category)}</td>
                     <td>{new Date(r.created_at).toLocaleString("ar")}</td>
                     <td>
                       <span className="pill">{statusLabel(r.status)}</span>

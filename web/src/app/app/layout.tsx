@@ -6,14 +6,12 @@ import { useEffect, useMemo, useState } from "react";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { createClient } from "@/lib/supabase/client";
-import { isStaff } from "@/lib/auth/roles";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [userLabel, setUserLabel] = useState("");
-  const [role, setRole] = useState("reviewer");
 
   useEffect(() => {
     const supabase = createClient();
@@ -36,7 +34,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         return;
       }
       const r = profile?.role || "reviewer";
-      setRole(r);
       setUserLabel(`${profile?.full_name || profile?.username || data.user.email} · ${r}`);
     });
   }, [router]);
@@ -52,7 +49,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const links = useMemo(
     () => [
-      { href: "/app/dashboard", label: "Analysis" },
+      { href: "/app/dashboard", label: "لوحة التحليل" },
       { href: "/app/review", label: "مراجعة جديدة" },
       { href: "/app/history", label: "السجل" },
       { href: "/app/reports", label: "التقارير" },
@@ -103,11 +100,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="side-foot">
           <div className="user-chip">{userLabel || "…"}</div>
-          {isStaff(role) ? (
-            <div className="help" style={{ color: "#93a0c7", paddingInline: 8 }}>
-              صلاحيات إدارية مفعّلة
-            </div>
-          ) : null}
           <div className="side-actions">
             <ThemeToggle />
             <button type="button" className="btn ghost" onClick={logout}>

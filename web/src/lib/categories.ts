@@ -1,17 +1,27 @@
-export const BUSINESS_CATEGORIES = [
-  { id: "technical_accuracy", label: "الدقة التقنية", labelEn: "Technical Accuracy" },
-  { id: "code_quality", label: "جودة الكود", labelEn: "Code Quality" },
-  { id: "video_clarity", label: "وضوح الفيديو", labelEn: "Video Clarity" },
-  { id: "security_compliance", label: "الامتثال الأمني", labelEn: "Security Compliance" },
-  { id: "pedagogy", label: "الجودة التعليمية", labelEn: "Pedagogy" },
-  { id: "general", label: "عام", labelEn: "General" },
+export const COURSE_CATALOG = [
+  { id: "frontend", label: "Frontend Development" },
+  { id: "backend", label: "Backend & APIs" },
+  { id: "mobile", label: "Mobile Development" },
+  { id: "data", label: "Data & AI" },
+  { id: "devops", label: "DevOps & Cloud" },
+  { id: "security", label: "Security" },
+  { id: "uiux", label: "UI/UX Design" },
+  { id: "soft_skills", label: "Soft Skills" },
+  { id: "general", label: "General Course" },
 ] as const;
 
-export type BusinessCategoryId = (typeof BUSINESS_CATEGORIES)[number]["id"];
+export const BUSINESS_CATEGORIES = COURSE_CATALOG;
+
+export type CourseId = (typeof COURSE_CATALOG)[number]["id"];
+export type BusinessCategoryId = CourseId;
 
 export function categoryLabel(id?: string | null) {
-  const found = BUSINESS_CATEGORIES.find((c) => c.id === id);
-  return found?.label || id || "عام";
+  const found = COURSE_CATALOG.find((c) => c.id === id);
+  return found?.label || id || "General Course";
+}
+
+export function courseLabel(id?: string | null) {
+  return categoryLabel(id);
 }
 
 export function normalizeTags(input: unknown): string[] {

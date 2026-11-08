@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { isStaff } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
-import { BUSINESS_CATEGORIES, normalizeTags } from "@/lib/categories";
+import { COURSE_CATALOG, normalizeTags } from "@/lib/categories";
 import { withOrgMeta } from "@/lib/orgMeta";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-const categoryIds = new Set<string>(BUSINESS_CATEGORIES.map((c) => c.id));
+const categoryIds = new Set<string>(COURSE_CATALOG.map((c) => c.id));
 
 export async function PATCH(request: Request, ctx: Ctx) {
   const auth = await requireUser();
