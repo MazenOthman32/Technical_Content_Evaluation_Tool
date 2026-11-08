@@ -19,3 +19,5 @@ results/
 *.wav
 .DS_Store
 .vercel
+supabase/.temp/
+web/tsconfig.tsbuildinfo
