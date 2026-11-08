@@ -40,6 +40,24 @@ def build_initial_prompt(course: CourseMeta) -> str:
     return base
 
 
+def _patch_av_open_compat() -> None:
+    """faster-whisper passes metadata_errors= to av.open; older/newer PyAV may reject it."""
+    try:
+        import av
+    except Exception:
+        return
+    if getattr(av.open, "_ipvr_compat", False):
+        return
+    original = av.open
+
+    def open_compat(*args, **kwargs):  # type: ignore[no-untyped-def]
+        kwargs.pop("metadata_errors", None)
+        return original(*args, **kwargs)
+
+    open_compat._ipvr_compat = True  # type: ignore[attr-defined]
+    av.open = open_compat  # type: ignore[assignment]
+
+
 def transcribe(
     audio: Path,
     course: CourseMeta,
@@ -48,8 +66,10 @@ def transcribe(
 ) -> list[TranscriptSegment]:
     from faster_whisper import WhisperModel
 
+    _patch_av_open_compat()
     size = _pick_model(model_size)
-    model = WhisperModel(size, device="auto", compute_type="default")
+    # Prefer int8/float32 on CPU; "default" may pick unsupported float16 paths.
+    model = WhisperModel(size, device="cpu", compute_type="int8")
     prompt = build_initial_prompt(course)
     language = _language_arg(course.language)
 

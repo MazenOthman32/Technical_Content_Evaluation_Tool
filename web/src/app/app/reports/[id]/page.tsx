@@ -25,6 +25,7 @@ export default function ReportDetailPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sev, setSev] = useState("");
   const [cat, setCat] = useState("");
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -75,6 +76,21 @@ export default function ReportDetailPage() {
   const selected = findings.find((f) => f.id === selectedId) || filtered[0] || null;
   const counts = countBySeverity(findings);
   const ready = hasReportContent(report);
+
+  async function retryProcessing() {
+    if (!row?.drive_url) return;
+    setRetrying(true);
+    try {
+      const res = await fetch(`/api/process/reviews/${encodeURIComponent(row.id)}/retry`, { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "فشل إعادة المعالجة");
+      setRow((prev) => (prev ? { ...prev, status: "queued", report: null, proposed_verdict: null, findings_count: 0 } : prev));
+    } catch (ex: unknown) {
+      setErr(ex instanceof Error ? ex.message : "فشل إعادة المعالجة");
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   function downloadJson() {
     if (!row) return;
@@ -189,12 +205,31 @@ export default function ReportDetailPage() {
         </div>
       </div>
 
-      {!ready ? (
+      {row.status === "failed" ? (
+        <div className="panel banner warn settings-panel" style={{ marginBottom: "1rem" }}>
+          <strong>فشلت المعالجة — التقرير مش مكتمل.</strong>
+          <p className="help" style={{ margin: "0.4rem 0 0" }}>
+            {(report?.limitations || []).find((l) => l.includes("فشل")) ||
+              "حصل خطأ أثناء التحليل. جرّب إعادة المعالجة."}
+          </p>
+          <div className="row-actions" style={{ marginTop: "0.85rem" }}>
+            {row.drive_url ? (
+              <button className="btn" type="button" disabled={retrying} onClick={retryProcessing}>
+                {retrying ? "جاري إعادة المعالجة..." : "إعادة المعالجة"}
+              </button>
+            ) : null}
+            <Link className="btn secondary" href="/app/review">
+              مراجعة جديدة
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      {!ready && row.status !== "failed" ? (
         <div className="panel banner warn settings-panel">
           <strong>التقرير لسه مش جاهز للمراجعة.</strong>
           <p className="help" style={{ margin: "0.4rem 0 0" }}>
-            الطلب محفوظ بحالة «{statusLabel(row.status)}» بدون نتائج تحليل. شغّل معالج الفيديو واربط{" "}
-            <code>NEXT_PUBLIC_PROCESS_API_URL</code> ثم أعد إرسال المراجعة عشان يظهر تقرير كامل هنا.
+            الطلب بحالة «{statusLabel(row.status)}» وبيتحلل دلوقتي أو مستني المعالج. الصفحة هتتحدث تلقائياً.
           </p>
           {row.drive_url ? (
             <p className="help" style={{ marginTop: "0.55rem" }}>
@@ -205,12 +240,17 @@ export default function ReportDetailPage() {
             </p>
           ) : null}
           <div className="row-actions" style={{ marginTop: "0.85rem" }}>
-            <Link className="btn" href="/app/review">
+            {row.drive_url ? (
+              <button className="btn" type="button" disabled={retrying} onClick={retryProcessing}>
+                {retrying ? "جاري الإرسال..." : "إعادة إرسال للمعالج"}
+              </button>
+            ) : null}
+            <Link className="btn secondary" href="/app/review">
               مراجعة جديدة
             </Link>
           </div>
         </div>
-      ) : (
+      ) : ready ? (
         <div className="report-layout">
           <div className="panel report-list">
             <div className="label-row" style={{ marginBottom: "0.75rem" }}>
@@ -325,7 +365,7 @@ export default function ReportDetailPage() {
             ) : null}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
