@@ -61,19 +61,29 @@ npm run seed:admins
 
 التقارير الكاملة تظهر بعد ما معالج الفيديو يخلّص التحليل ويكتب النتائج في Supabase.
 
-1. شغّل المعالج محلياً أو على سيرفر:
+### تشغيل محلي سريع
 
 ```powershell
-# من جذر المشروع مع نفس مفاتيح Supabase في البيئة
-video-reviewer ui
+# طرفية 1 — المعالج
+powershell -File .\scripts\start-processor.ps1
+
+# طرفية 2 — نفق عام (لو الموقع على Vercel)
+npx --yes localtunnel --port 8765
 ```
 
-2. في Vercel / `web/.env.local` أضف:
+ثم ضع رابط النفق في Vercel كـ `PROCESS_API_URL` (و `NEXT_PUBLIC_PROCESS_API_URL` اختياري).
+
+محلياً في `web/.env.local`:
 
 ```env
-NEXT_PUBLIC_PROCESS_API_URL=http://127.0.0.1:8765
+PROCESS_API_URL=http://127.0.0.1:8765
 ```
 
-(استبدل بالـ URL العام لو المعالج منشور)
+الواجهة تستدعي `/api/process/reviews` (بروكسي سيرفر) → المعالج، وبعدها التقرير يتحدث تلقائياً في صفحة التقارير.
 
-3. بعد «بدء المراجعة» هتتفتح صفحة التقرير، وتتحدث تلقائياً لما النتائج توصل.
+### Docker (سيرفر دائم)
+
+```powershell
+docker build -f Dockerfile.processor -t instant-processor .
+docker run --env-file .env -p 8765:8765 instant-processor
+```

@@ -16,8 +16,15 @@ export default function ReviewPage() {
   const [fileName, setFileName] = useState("لم يتم اختيار ملف");
   const [fileInputKey, setFileInputKey] = useState(0);
   const [loading, setLoading] = useState(false);
-  const processApi = (process.env.NEXT_PUBLIC_PROCESS_API_URL || "").replace(/\/$/, "");
+  const [processorReady, setProcessorReady] = useState<boolean | null>(null);
   const modelOptions = useMemo(() => MODELS[provider] || [], [provider]);
+
+  useEffect(() => {
+    fetch("/api/process/reviews")
+      .then((r) => r.json())
+      .then((j) => setProcessorReady(Boolean(j.ok)))
+      .catch(() => setProcessorReady(false));
+  }, []);
 
   useEffect(() => {
     setModel((prev) => {
@@ -77,6 +84,10 @@ export default function ReviewPage() {
       if (source === "drive" && !url) throw new Error("الصق لينك Google Drive");
       if (source === "file" && !file?.name) throw new Error("اختر ملف فيديو");
 
+      const health = await fetch("/api/process/reviews").then((r) => r.json()).catch(() => ({ ok: false }));
+      const canProcess = Boolean(health.ok);
+      setProcessorReady(canProcess);
+
       const started = Date.now();
       const reviewId = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
       const videoName = source === "file" ? file?.name || "video" : url;
@@ -87,36 +98,27 @@ export default function ReviewPage() {
         drive_url: source === "drive" ? url : null,
         provider,
         model,
-        status: processApi ? "queued" : "awaiting_backend",
+        status: canProcess ? "queued" : "awaiting_backend",
         duration_ms: Date.now() - started,
       });
       if (insertErr) throw new Error(insertErr.message || "تعذر حفظ المراجعة");
 
-      if (processApi) {
+      if (canProcess) {
         const body = new FormData();
         body.set("provider", provider);
         body.set("model", model);
         body.set("review_id", reviewId);
         body.set("drive_url", source === "drive" ? url : "");
         if (source === "file" && file) body.set("video", file);
-        const session = await supabase.auth.getSession();
-        const res = await fetch(`${processApi}/api/reviews`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${session.data.session?.access_token || ""}` },
-          body,
-        });
+        const res = await fetch("/api/process/reviews", { method: "POST", body });
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
           await supabase.from("reviews").update({ status: "failed" }).eq("id", reviewId);
-          throw new Error(
-            (typeof data.detail === "string" && data.detail) ||
-              data.error ||
-              "فشل إرسال المهمة للمعالج"
-          );
+          throw new Error(data.error || data.detail || "فشل إرسال المهمة للمعالج");
         }
         toast.push("تم إرسال المراجعة للمعالجة — هتفتح صفحة التقرير", "ok");
       } else {
-        toast.push("تم حفظ الطلب. افتح التقرير لمتابعة الحالة بعد تشغيل المعالج", "ok");
+        toast.push("تم حفظ الطلب. المعالج غير متصل حالياً", "ok");
       }
       form?.reset?.();
       clearForm();
@@ -137,6 +139,14 @@ export default function ReviewPage() {
         </div>
       </div>
       <form className="panel form review-form settings-panel" onSubmit={onSubmit}>
+        {processorReady === false ? (
+          <div className="banner warn">
+            معالج الفيديو غير متصل الآن. الطلبات هتتسجل، والتحليل الكامل هيشتغل بعد تشغيل المعالج.
+          </div>
+        ) : null}
+        {processorReady === true ? (
+          <div className="banner ok">معالج الفيديو متصل — التقارير الكاملة هتتولد بعد انتهاء التحليل.</div>
+        ) : null}
         <div className="tabs">
           <button type="button" className={source === "drive" ? "active" : ""} onClick={() => setSource("drive")}>
             Google Drive
