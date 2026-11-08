@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   const password = String(body.password || "");
   const fullName = String(body.full_name || "").trim() || email.split("@")[0];
   const username = String(body.username || "").trim() || email.split("@")[0];
-  let role = String(body.role || "reviewer");
+  const role = String(body.role || "reviewer");
   const allowed =
     ctx.profile?.role === "super_admin"
       ? ["super_admin", "admin", "reviewer"]
