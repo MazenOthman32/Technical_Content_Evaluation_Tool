@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
 import CoursePicker from "@/components/CoursePicker";
+import ProcessTimer, { fetchProcessEstimateMs } from "@/components/ProcessTimer";
 import Skeleton from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { isStaff } from "@/lib/auth/roles";
@@ -44,6 +45,12 @@ export default function ReportDetailPage() {
   const [tagDraft, setTagDraft] = useState("");
   const [titleDraft, setTitleDraft] = useState("");
   const [savingMeta, setSavingMeta] = useState(false);
+  const [estimateMs, setEstimateMs] = useState<number | null>(null);
+  const [startedAt, setStartedAt] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    fetchProcessEstimateMs().then(setEstimateMs);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -93,10 +100,14 @@ export default function ReportDetailPage() {
         const rel = enriched.course as unknown;
         enriched.course = Array.isArray(rel) ? rel[0] || null : rel || null;
         setRow(enriched);
-        if (first) setTitleDraft(enriched.session_title || "");
+        if (first) {
+          setTitleDraft(enriched.session_title || "");
+          const created = Date.parse(String(enriched.created_at || ""));
+          setStartedAt(Number.isFinite(created) ? created : Date.now());
+        }
         setErr("");
         const st = data.status;
-        if (st === "queued" || st === "running" || st === "downloading") {
+        if (st === "queued" || st === "running" || st === "downloading" || st === "awaiting_backend") {
           timer = setTimeout(() => load(false), 4000);
         }
       }
@@ -385,6 +396,13 @@ export default function ReportDetailPage() {
           <p className="help" style={{ margin: "0.4rem 0 0" }}>
             الحالة الحالية «{statusLabel(row.status)}». يجري التحليل أو بانتظار المعالج، وستُحدَّث الصفحة تلقائياً.
           </p>
+          <ProcessTimer
+            compact
+            startedAt={startedAt}
+            status={row.status}
+            estimateMs={estimateMs}
+            title="مؤقت المعالجة"
+          />
         </div>
       ) : ready ? (
         <div className="report-layout">

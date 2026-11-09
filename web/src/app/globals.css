@@ -1229,6 +1229,59 @@ body.nav-open { overflow: hidden; }
   padding: 1rem 1.1rem;
 }
 
+.process-timer {
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.process-timer.compact {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+}
+
+.process-timer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.process-timer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.process-timer-clock {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  font-size: 1.35rem;
+}
+
+.process-timer-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+  overflow: hidden;
+}
+
+.process-timer-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 75%, #0ea5e9), var(--accent));
+  transition: width 0.8s ease;
+}
+
+@media (max-width: 560px) {
+  .process-timer-grid { grid-template-columns: 1fr; }
+  .process-timer-clock { font-size: 1.2rem; }
+}
+
 html[data-theme="dark"] .banner.warn {
   background: #422006;
   border-color: #854d0e;

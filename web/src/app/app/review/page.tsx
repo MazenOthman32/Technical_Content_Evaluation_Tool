@@ -1,17 +1,25 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import CoursePicker from "@/components/CoursePicker";
+import ProcessTimer, { fetchProcessEstimateMs } from "@/components/ProcessTimer";
 import { useToast } from "@/components/Toast";
 import { normalizeSessionTitle } from "@/lib/categories";
 import { Course } from "@/lib/courses";
 import { MODELS } from "@/lib/models";
+import { statusLabel } from "@/lib/reports";
 import { createClient } from "@/lib/supabase/client";
+
+type ActiveJob = {
+  id: string;
+  startedAt: number;
+  status: string;
+  title: string;
+};
 
 export default function ReviewPage() {
   const toast = useToast();
-  const router = useRouter();
   const [source, setSource] = useState<"drive" | "file">("drive");
   const [driveUrl, setDriveUrl] = useState("");
   const [provider, setProvider] = useState("groq");
@@ -24,6 +32,8 @@ export default function ReviewPage() {
   const [fileInputKey, setFileInputKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [processorReady, setProcessorReady] = useState<boolean | null>(null);
+  const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
+  const [estimateMs, setEstimateMs] = useState<number | null>(null);
   const modelOptions = useMemo(() => MODELS[provider] || [], [provider]);
 
   useEffect(() => {
@@ -31,7 +41,43 @@ export default function ReviewPage() {
       .then((r) => r.json())
       .then((j) => setProcessorReady(Boolean(j.ok)))
       .catch(() => setProcessorReady(false));
+    fetchProcessEstimateMs().then(setEstimateMs);
   }, []);
+
+  useEffect(() => {
+    if (!activeJob?.id) return;
+    if (activeJob.status === "completed" || activeJob.status === "failed") return;
+
+    const reviewId = activeJob.id;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let notified = false;
+
+    async function poll() {
+      const supabase = createClient();
+      const { data } = await supabase.from("reviews").select("status").eq("id", reviewId).maybeSingle();
+      if (cancelled) return;
+      const nextStatus = data?.status || "queued";
+      setActiveJob((prev) => (prev && prev.id === reviewId ? { ...prev, status: nextStatus } : prev));
+      if (nextStatus === "completed" || nextStatus === "failed") {
+        if (!notified) {
+          notified = true;
+          toast.push(
+            nextStatus === "completed" ? "اكتملت معالجة المراجعة" : "فشلت معالجة المراجعة",
+            nextStatus === "completed" ? "ok" : "error"
+          );
+        }
+        return;
+      }
+      timer = setTimeout(poll, 4000);
+    }
+
+    timer = setTimeout(poll, 2500);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [activeJob?.id, activeJob?.status, toast]);
 
   useEffect(() => {
     setModel((prev) => {
@@ -148,20 +194,33 @@ export default function ReviewPage() {
           throw new Error(data.error || data.detail || "فشل إرسال المهمة للمعالج");
         }
         toast.push("تم إرسال المراجعة للمعالجة", "ok");
+        setActiveJob({
+          id: reviewId,
+          startedAt: Date.now(),
+          status: "queued",
+          title,
+        });
       } else {
         toast.push("تم حفظ الطلب. المعالج غير متصل حالياً", "ok");
+        setActiveJob({
+          id: reviewId,
+          startedAt: Date.now(),
+          status: "awaiting_backend",
+          title,
+        });
       }
       form?.reset?.();
       clearForm();
       setSessionTitle("");
       setTags("");
-      router.push(`/app/reports/${encodeURIComponent(reviewId)}`);
     } catch (ex: unknown) {
       toast.push(ex instanceof Error ? ex.message : "حدث خطأ", "error");
     } finally {
       setLoading(false);
     }
   }
+
+  const jobDone = activeJob?.status === "completed" || activeJob?.status === "failed";
 
   return (
     <div className="page-fill">
@@ -171,6 +230,41 @@ export default function ReviewPage() {
           <p className="page-sub">حدّد عنوان السيشن والكورس، ثم ارفع الفيديو أو الصق رابط Drive</p>
         </div>
       </div>
+
+      {activeJob ? (
+        <div className="panel settings-panel" style={{ marginBottom: "1rem" }}>
+          <div className="label-row" style={{ marginBottom: "0.35rem" }}>
+            <h2 className="section-title" style={{ margin: 0 }}>
+              {activeJob.title}
+            </h2>
+            <span className="pill">{statusLabel(activeJob.status)}</span>
+          </div>
+          {!jobDone ? (
+            <ProcessTimer
+              startedAt={activeJob.startedAt}
+              status={activeJob.status}
+              estimateMs={estimateMs}
+            />
+          ) : (
+            <div className={`banner ${activeJob.status === "completed" ? "ok" : "warn"}`} style={{ marginTop: "0.75rem" }}>
+              {activeJob.status === "completed"
+                ? "اكتملت المعالجة. يمكنك فتح التقرير الآن."
+                : "فشلت المعالجة. افتح التقرير للتفاصيل أو أعد المحاولة."}
+            </div>
+          )}
+          <div className="row-actions" style={{ marginTop: "0.85rem" }}>
+            <Link className="btn" href={`/app/reports/${encodeURIComponent(activeJob.id)}`}>
+              فتح التقرير
+            </Link>
+            {jobDone ? (
+              <button className="btn secondary" type="button" onClick={() => setActiveJob(null)}>
+                بدء مراجعة أخرى
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <form className="panel form review-form settings-panel" onSubmit={onSubmit}>
         {processorReady === false ? (
           <div className="banner warn">
@@ -266,9 +360,14 @@ export default function ReviewPage() {
           </label>
         </div>
 
-        <button className="btn" type="submit" disabled={loading}>
+        <button className="btn" type="submit" disabled={loading || Boolean(activeJob && !jobDone)}>
           {loading ? <><span className="spinner" /> جاري الإرسال...</> : "بدء المراجعة"}
         </button>
+        {activeJob && !jobDone ? (
+          <p className="help" style={{ marginTop: "0.65rem" }}>
+            يوجد تحليل قيد التشغيل في هذه الصفحة. انتظر انتهاؤه أو افتح التقرير من الزر أعلاه.
+          </p>
+        ) : null}
       </form>
     </div>
   );
