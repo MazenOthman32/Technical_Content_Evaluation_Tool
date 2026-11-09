@@ -224,6 +224,21 @@ export default function ReviewPage() {
 
   return (
     <div className="page-fill">
+      {loading ? (
+        <div className="page-loader" role="status" aria-live="polite" aria-label="جاري إرسال المراجعة">
+          <div className="page-loader-card">
+            <div className="process-loader" aria-hidden>
+              <span className="process-loader-ring" />
+              <span className="process-loader-pct">...</span>
+            </div>
+            <strong>جاري إرسال المراجعة</strong>
+            <p className="help" style={{ margin: 0 }}>
+              يتم تجهيز الطلب ورفعه للمعالج، برجاء الانتظار…
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="page-head">
         <div>
           <h1 className="page-title">مراجعة جديدة</h1>

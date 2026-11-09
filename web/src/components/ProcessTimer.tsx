@@ -62,16 +62,21 @@ export default function ProcessTimer({
 
   if (!active) return null;
 
+  const pct = Math.round(progress * 100);
+
   return (
     <div className={`process-timer ${compact ? "compact" : ""}`}>
       <div className="process-timer-head">
-        <div>
+        <div className="process-loader" aria-hidden>
+          <span className="process-loader-ring" />
+          <span className="process-loader-pct">{pct}%</span>
+        </div>
+        <div className="process-timer-copy">
           <strong>{title}</strong>
           <p className="help" style={{ margin: "0.25rem 0 0" }}>
             الحالة: {statusLabel(status)} · تقديري حتى الانتهاء ≈ {formatClock(estimate)}
           </p>
         </div>
-        <span className="spinner" aria-hidden />
       </div>
 
       <div className="process-timer-grid">
@@ -92,10 +97,10 @@ export default function ProcessTimer({
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={Math.round(progress * 100)}
+        aria-valuenow={pct}
         aria-label="تقدم المعالجة التقديري"
       >
-        <div className="process-timer-fill" style={{ width: `${progress * 100}%` }} />
+        <div className="process-timer-fill" style={{ width: `${pct}%` }} />
       </div>
       <p className="help" style={{ margin: "0.55rem 0 0" }}>
         التقدير تقريبي ويختلف حسب طول الفيديو وسرعة المعالج.
