@@ -35,7 +35,7 @@ const emptyEdit = {
 
 export default function SettingsPage() {
   const toast = useToast();
-  const [tab, setTab] = useState<"keys" | "prefs" | "users">("keys");
+  const [tab, setTab] = useState<"keys" | "prefs" | "processor" | "users">("keys");
   const [role, setRole] = useState("reviewer");
   const [myId, setMyId] = useState("");
   const [provider, setProvider] = useState("groq");
@@ -49,8 +49,21 @@ export default function SettingsPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [usersErr, setUsersErr] = useState("");
   const [editing, setEditing] = useState<typeof emptyEdit | null>(null);
+  const [processorOk, setProcessorOk] = useState<boolean | null>(null);
+  const [processorMsg, setProcessorMsg] = useState("");
+  const [processorBase, setProcessorBase] = useState("");
+  const [processorBusy, setProcessorBusy] = useState(false);
   const options = useMemo(() => MODELS[provider] || [], [provider]);
   const isSuper = role === "super_admin";
+  const startCommands = useMemo(
+    () =>
+      [
+        'cd "C:\\Users\\omaze\\OneDrive\\Desktop\\Final Evaluation Tool"',
+        ".\\scripts\\start-processor.ps1",
+        ".\\scripts\\start-tunnel.ps1",
+      ].join("\n"),
+    []
+  );
 
   async function loadSettings() {
     const supabase = createClient();
@@ -93,12 +106,65 @@ export default function SettingsPage() {
     setUsers(json.users || []);
   }
 
+  async function checkProcessor() {
+    setProcessorBusy(true);
+    try {
+      const res = await fetch("/api/process/reviews", { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      const ok = Boolean(json.ok);
+      setProcessorOk(ok);
+      setProcessorBase(String(json.base || ""));
+      setProcessorMsg(
+        ok
+          ? "المعالج متصل وجاهز لاستقبال المراجعات."
+          : json.message || json.error || "المعالج غير متصل. شغّله من اللاب ثم افحص مرة أخرى."
+      );
+      toast.push(ok ? "المعالج متصل" : "المعالج غير متصل", ok ? "ok" : "error");
+    } catch (ex: unknown) {
+      setProcessorOk(false);
+      setProcessorMsg(ex instanceof Error ? ex.message : "فشل فحص المعالج");
+      toast.push("فشل فحص المعالج", "error");
+    } finally {
+      setProcessorBusy(false);
+    }
+  }
+
+  async function startProcessorAction() {
+    setProcessorBusy(true);
+    try {
+      const health = await fetch("/api/process/reviews", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ ok: false }));
+      if (health.ok) {
+        setProcessorOk(true);
+        setProcessorBase(String(health.base || ""));
+        setProcessorMsg("المعالج متصل بالفعل.");
+        toast.push("المعالج شغّال بالفعل", "ok");
+        return;
+      }
+
+      const a = document.createElement("a");
+      a.href = "/ops/start-vercel-processor.ps1";
+      a.download = "start-vercel-processor.ps1";
+      a.click();
+      await navigator.clipboard.writeText(startCommands).catch(() => undefined);
+      setProcessorOk(false);
+      setProcessorMsg(
+        "تم تحميل سكربت التشغيل ونسخ الأوامر. شغّل الملف على اللاب (أو الصق الأوامر في PowerShell)، ثم اضغط «فحص الاتصال»."
+      );
+      toast.push("تم تجهيز التشغيل — افتح السكربت على اللاب", "ok");
+    } catch (ex: unknown) {
+      toast.push(ex instanceof Error ? ex.message : "تعذر بدء التجهيز", "error");
+    } finally {
+      setProcessorBusy(false);
+    }
+  }
+
   useEffect(() => {
     loadSettings();
   }, []);
 
   useEffect(() => {
     if (tab === "users" && isStaff(role)) loadUsers();
+    if (tab === "processor") checkProcessor();
   }, [tab, role]);
 
   async function saveSettings(e: FormEvent<HTMLFormElement>) {
@@ -296,12 +362,83 @@ export default function SettingsPage() {
         <button type="button" className={tab === "prefs" ? "active" : ""} onClick={() => setTab("prefs")}>
           تفضيلات المراجعة
         </button>
+        <button type="button" className={tab === "processor" ? "active" : ""} onClick={() => setTab("processor")}>
+          المعالج
+        </button>
         {isStaff(role) ? (
           <button type="button" className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
             إدارة المستخدمين
           </button>
         ) : null}
       </div>
+
+      {tab === "processor" ? (
+        <div className="panel settings-panel">
+          <h2 className="section-title">معالج الفيديو (Vercel)</h2>
+          <p className="help" style={{ marginBottom: "1rem" }}>
+            موقع Vercel لا يقدر يشغّل Python على اللاب مباشرة. الزر يجهّز سكربت التشغيل محلياً، وبعد فتح النفق حدّث
+            <code> PROCESS_API_URL </code>
+            في Vercel إن تغيّر اللينك.
+          </p>
+
+          <div className={`banner ${processorOk ? "ok" : processorOk === false ? "warn" : ""}`} style={{ marginBottom: "1rem" }}>
+            <strong>
+              {processorOk === null ? "جاري الفحص..." : processorOk ? "متصل" : "غير متصل"}
+            </strong>
+            <p className="help" style={{ margin: "0.4rem 0 0" }}>
+              {processorMsg || "اضغط فحص الاتصال لمعرفة حالة المعالج."}
+            </p>
+            {processorBase ? (
+              <p className="help" style={{ margin: "0.35rem 0 0", direction: "ltr", textAlign: "left" }}>
+                {processorBase}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="row-actions" style={{ marginBottom: "1rem" }}>
+            <button className="btn" type="button" disabled={processorBusy} onClick={startProcessorAction}>
+              {processorBusy ? (
+                <>
+                  <span className="spinner" /> جاري التجهيز...
+                </>
+              ) : (
+                "تشغيل المعالج"
+              )}
+            </button>
+            <button className="btn secondary" type="button" disabled={processorBusy} onClick={checkProcessor}>
+              فحص الاتصال
+            </button>
+            <button
+              className="btn secondary"
+              type="button"
+              disabled={processorBusy}
+              onClick={async () => {
+                await navigator.clipboard.writeText(startCommands);
+                toast.push("تم نسخ أوامر PowerShell", "ok");
+              }}
+            >
+              نسخ الأوامر
+            </button>
+          </div>
+
+          <pre
+            className="help"
+            style={{
+              margin: 0,
+              padding: "0.9rem 1rem",
+              borderRadius: "var(--radius)",
+              border: "1px solid var(--line)",
+              background: "color-mix(in srgb, var(--panel-solid) 88%, var(--bg))",
+              whiteSpace: "pre-wrap",
+              direction: "ltr",
+              textAlign: "left",
+              lineHeight: 1.7,
+            }}
+          >
+            {startCommands}
+          </pre>
+        </div>
+      ) : null}
 
       {(tab === "keys" || tab === "prefs") && (
         <form className="panel form settings-panel" onSubmit={saveSettings}>
